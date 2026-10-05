@@ -38,12 +38,31 @@ DESPLIEGUE EN VERCEL
 - Build Command: npm run build (o el predeterminado de Next.js)
 - En Environment Variables define:
     NEXT_PUBLIC_POWERGY_API_URL=https://powergy.somee.com
+    NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=<publishable-or-anon-key>
+    NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET=powergy-product-images
 - Haz un redeploy después de cambiar variables de entorno.
 - Vercel hará los despliegues automáticos al hacer push a la rama
   de producción. GitHub Actions ejecuta lint y build en cada PR y
   push a main.
 - En Somee, agrega a Cors:AllowedOrigins el dominio HTTPS exacto
   asignado por Vercel y cualquier dominio personalizado.
+
+PANEL DE ADMINISTRACIÓN:
+  Abre /admin e inicia sesión con un usuario creado en Supabase Auth.
+  No habilites el registro público. El UUID debe estar autorizado en
+  public.admin_users:
+    INSERT INTO public.admin_users
+      (id, supabase_user_id, email, role, is_active, created_at)
+    VALUES
+      (gen_random_uuid(), '<auth-user-uuid>', '<correo>', 'admin', true, now());
+  Ejecuta api/Powergy.Api/Sql/powergy-product-storage.sql en Supabase SQL
+  Editor. Crea el bucket público para lectura y restringe las subidas y
+  cambios a usuarios administradores.
+  Usa solo la publishable/anon key en NEXT_PUBLIC_SUPABASE_ANON_KEY.
+  Nunca pongas la service_role key en Vercel ni en variables NEXT_PUBLIC_*.
+  Para desarrollo local, copia .env.example como .env.local, completa los
+  valores y reinicia el servidor Next.js.
 
 URL del API:
   La tienda consulta https://powergy.somee.com por defecto.

@@ -49,15 +49,17 @@ Before starting the deployed app, edit the protected `appsettings.Production.jso
   },
   "Cors": {
     "AllowedOrigins": [
-      "https://<your-frontend-domain>"
+      "https://powergy.vercel.app"
     ]
   }
 }
 ```
 
-Replace the placeholders on the server only. Keep the password out of source control and out of the frontend. Ensure Somee blocks public downloads of `appsettings.Production.json`; if that file cannot be protected, do not deploy a real database password in it and use an application-settings/secret feature or a hosting plan that provides one. Production startup deliberately fails with a clear error if the database connection, HTTPS Supabase URL, or exact HTTPS frontend origin is missing/invalid. Configuration values supplied by the host's environment variables override JSON values (`ConnectionStrings__Supabase`, `Supabase__Url`, and `Cors__AllowedOrigins__0`).
+Replace the database and Supabase URL placeholders on the server only. The allowed origin must match the browser's `Origin` exactly: use `https://powergy.vercel.app` without a trailing slash, and add any custom production domain as a separate entry if used. Keep the password out of source control and out of the frontend. Ensure Somee blocks public downloads of `appsettings.Production.json`; if that file cannot be protected, do not deploy a real database password in it and use an application-settings/secret feature or a hosting plan that provides one. Production startup deliberately fails with a clear error if the database connection, HTTPS Supabase URL, or exact HTTPS frontend origin is missing/invalid. Configuration values supplied by the host's environment variables override JSON values (`ConnectionStrings__Supabase`, `Supabase__Url`, and `Cors__AllowedOrigins__0`). After changing server settings, restart/recycle the application in Somee.
 
 The release package does not run EF migrations automatically. Apply migrations deliberately from a trusted development machine or CI environment before/alongside deployment. After deployment, verify `/health`, `/api/categories`, `/openapi/v1.json` only when running Development (OpenAPI is not exposed in Production), and the public frontend can call the API. Keep `ASPNETCORE_ENVIRONMENT` as `Production`.
+
+For quick tests against the deployed Somee API, open `Powergy.Api.Somee.http` in VS Code with the REST Client extension and select **Send Request** above each request. `/health` checks both the API and database; the remaining requests exercise public routes and expected 400, 404 and 401 responses.
 
 Restore the local EF command-line tool and apply the initial Code First migration after setting the connection string:
 
@@ -85,6 +87,8 @@ VALUES (gen_random_uuid(), '<auth-user-uuid>', '<admin-email>', 'admin', true, n
 
 Only an active allowlisted user with the `admin` role can create, update or deactivate catalog records. Public routes do not require a token.
 
+The frontend admin panel is available at `/admin`. Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (the publishable/anon key only), and `NEXT_PUBLIC_SUPABASE_STORAGE_BUCKET=powergy-product-images` in local `.env.local` and Vercel. Create the Auth user, add its UUID to `admin_users` as shown above, and run `Sql/powergy-product-storage.sql` in the Supabase SQL Editor. The script creates a publicly readable image bucket and uses a `SECURITY DEFINER` predicate against `admin_users` to restrict uploads, updates, and deletes to active admins. Never expose the Supabase `service_role` key in the browser.
+
 Product POST requests accept an optional `id`; this allows importing the existing catalog without changing IDs used by the current browser cart. New products receive a generated ID when it is omitted. The `CategoryId` values are available from `GET /api/categories`.
 
 ## Routes
@@ -96,7 +100,7 @@ Product POST requests accept an optional `id`; this allows importing the existin
 - `POST`, `PUT` and `DELETE` under `/api/categories` and `/api/products` — admin-only category/product management. DELETE deactivates rather than permanently removing records.
 - `GET /health` — API/database connectivity check.
 
-Product response fields preserve the current frontend catalog names (`price_usd`, `primary_image`, `oferta`, `garantia`, `transporte`, `factura`, `top_ventas`, `top_rank`). Images remain paths/URLs; Supabase Storage integration can be added when the admin image workflow is implemented.
+Product response fields preserve the current frontend catalog names (`price_usd`, `primary_image`, `oferta`, `garantia`, `transporte`, `factura`, `top_ventas`, `top_rank`). The admin panel uploads product images to the `powergy-product-images` Supabase Storage bucket and saves their public URLs in `primary_image`.
 
 ## API structure and pagination
 

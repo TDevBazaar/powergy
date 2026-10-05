@@ -1,0 +1,35 @@
+@Powergy.Api_HostAddress = https://powergy.somee.com
+
+### Verificar que la API y la conexión con PostgreSQL funcionan
+GET {{Powergy.Api_HostAddress}}/health
+Accept: application/json
+
+###
+
+### Consultar las categorías públicas
+GET {{Powergy.Api_HostAddress}}/api/categories
+Accept: application/json
+
+###
+
+### Consultar la primera página del catálogo
+GET {{Powergy.Api_HostAddress}}/api/products?page=1&pageSize=10
+Accept: application/json
+
+###
+
+### Comprobar validación: pageSize mayor que 100 debe responder 400
+GET {{Powergy.Api_HostAddress}}/api/products?page=1&pageSize=101
+Accept: application/json
+
+###
+
+### Consultar un producto inexistente: debe responder 404
+GET {{Powergy.Api_HostAddress}}/api/products/producto-inexistente-para-prueba
+Accept: application/json
+
+###
+
+### Ruta administrativa sin token: debe responder 401
+GET {{Powergy.Api_HostAddress}}/api/products/admin?page=1&pageSize=10
+Accept: application/json
