@@ -662,6 +662,20 @@ export default function Catalogo() {
         </section>
       </main>
 
+      <footer className="border-t border-neutral-100 bg-white px-4 py-6 text-center text-xs text-neutral-500">
+        <p>
+          Sitio creado por{' '}
+          <a
+            href="https://github.com/TDevBazaar"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-neutral-800 underline-offset-4 transition hover:underline"
+          >
+            TDevBazaar
+          </a>
+        </p>
+      </footer>
+
       {/* ===== Menú lateral ===== */}
       {menuAbierto && (
         <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="Menú de navegación">
