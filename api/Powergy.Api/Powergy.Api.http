@@ -1,0 +1,134 @@
+@Powergy.Api_HostAddress = http://localhost:5007
+@adminToken = replace-with-a-supabase-access-token
+@categoryId = f74535c2-37c1-401c-b67b-665818f36a2d
+@productId = PRD-example-product-id
+@productSlug = example-product-slug
+
+### Health
+GET {{Powergy.Api_HostAddress}}/health
+Accept: application/json
+
+###
+
+### List active categories
+GET {{Powergy.Api_HostAddress}}/api/categories
+Accept: application/json
+
+###
+
+### Get active category
+GET {{Powergy.Api_HostAddress}}/api/categories/{{categoryId}}
+Accept: application/json
+
+###
+
+### List/search catalog with server-side pagination
+GET {{Powergy.Api_HostAddress}}/api/products?page=1&pageSize=24&category=paneles-solares&q=solar
+Accept: application/json
+
+###
+
+### Get product by slug
+GET {{Powergy.Api_HostAddress}}/api/products/{{productSlug}}
+Accept: application/json
+
+###
+
+### Admin: list catalog page, including inactive products
+GET {{Powergy.Api_HostAddress}}/api/products/admin?page=1&pageSize=25&includeInactive=true
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+###
+
+### Admin: list all categories
+GET {{Powergy.Api_HostAddress}}/api/categories/admin
+Authorization: Bearer {{adminToken}}
+Accept: application/json
+
+###
+
+### Admin: create product
+POST {{Powergy.Api_HostAddress}}/api/products
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "slug": "demo-panel-solar",
+  "categoryId": "{{categoryId}}",
+  "subcategory": "Panel solar",
+  "brand": "POWERGY",
+  "model": "Demo 400W",
+  "name": "Panel solar de demostración",
+  "priceUsd": 250,
+  "specifications": "400 W monocristalino",
+  "primaryImage": "assets/demo-panel.jpg",
+  "onSale": false,
+  "warranty": true,
+  "transport": false,
+  "invoice": false,
+  "topRank": null
+}
+
+###
+
+### Admin: update product
+PUT {{Powergy.Api_HostAddress}}/api/products/{{productId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "slug": "demo-panel-solar",
+  "categoryId": "{{categoryId}}",
+  "subcategory": "Panel solar",
+  "brand": "POWERGY",
+  "model": "Demo 400W",
+  "name": "Panel solar de demostración",
+  "priceUsd": 250,
+  "specifications": "400 W monocristalino",
+  "primaryImage": "assets/demo-panel.jpg",
+  "onSale": false,
+  "warranty": true,
+  "transport": false,
+  "invoice": false,
+  "topRank": null,
+  "isActive": true
+}
+
+###
+
+### Admin: deactivate product
+DELETE {{Powergy.Api_HostAddress}}/api/products/{{productId}}
+Authorization: Bearer {{adminToken}}
+
+###
+
+### Admin: create category
+POST {{Powergy.Api_HostAddress}}/api/categories
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Accesorios",
+  "slug": "accesorios",
+  "sortOrder": 4
+}
+
+###
+
+### Admin: update category
+PUT {{Powergy.Api_HostAddress}}/api/categories/{{categoryId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Paneles solares",
+  "slug": "paneles-solares",
+  "sortOrder": 3
+}
+
+###
+
+### Admin: deactivate category
+DELETE {{Powergy.Api_HostAddress}}/api/categories/{{categoryId}}
+Authorization: Bearer {{adminToken}}

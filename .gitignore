@@ -1,0 +1,29 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+**/secrets.json
+
+# Frontend dependencies and generated files
+**/node_modules/
+**/.next/
+**/out/
+**/.vercel/
+**/*.tsbuildinfo
+**/coverage/
+
+# .NET build output and local IDE files
+**/bin/
+**/obj/
+**/publish/
+**/.vs/
+**/*.user
+**/*.suo
+
+# Logs and OS files
+**/*.log
+.DS_Store
+Thumbs.db
