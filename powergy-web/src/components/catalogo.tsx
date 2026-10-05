@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { ORDEN_CATEGORIAS, type Producto } from '@/data/productos'
 import { obtenerCatalogo } from '@/lib/catalogo-api'
+import { obtenerUrlImagen } from '@/lib/image-url'
 import { linkProducto, linkWhatsApp, linkGeneral, WHATSAPP_VISIBLE } from '@/lib/whatsapp'
 
 /* ---------- Utilidades ---------- */
@@ -93,7 +94,7 @@ function ImagenProducto({ p, alta }: { p: Producto; alta?: boolean }) {
   }
   return (
     <img
-      src={`/${p.primary_image}`}
+      src={obtenerUrlImagen(p.primary_image)}
       alt={p.name}
       loading="lazy"
       onError={() => setError(true)}

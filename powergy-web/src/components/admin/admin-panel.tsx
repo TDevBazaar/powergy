@@ -21,6 +21,7 @@ import {
   type ProductoAdmin,
 } from '@/lib/admin-api'
 import { getSupabaseClient } from '@/lib/supabase'
+import { obtenerUrlImagen } from '@/lib/image-url'
 
 type Pestaña = 'productos' | 'categorias'
 
@@ -542,7 +543,7 @@ export default function AdminPanel() {
                     <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-neutral-100">
                       {producto.primary_image && (
                         <img
-                          src={producto.primary_image}
+                          src={obtenerUrlImagen(producto.primary_image)}
                           alt=""
                           className="h-full w-full object-contain"
                         />
@@ -694,7 +695,7 @@ export default function AdminPanel() {
                     setFormularioProducto((current) => ({ ...current, primaryImage })), { required: true })}
                   {formularioProducto.primaryImage && (
                     <img
-                      src={formularioProducto.primaryImage}
+                      src={obtenerUrlImagen(formularioProducto.primaryImage)}
                       alt="Vista previa del producto"
                       className="mt-3 h-28 w-28 rounded-xl bg-neutral-50 object-contain"
                     />
