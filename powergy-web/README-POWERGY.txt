@@ -92,9 +92,13 @@ DÓNDE EDITAR LAS COSAS
     src/lib/whatsapp.ts
 
 - Logo e imágenes:
-    public/logo-powergy-claro.png   (logo del header y hero)
+    public/logo-powergy-claro.webp  (logo optimizado del header y hero)
+    public/logo-powergy-claro.png   (original)
     public/assets/                  (fotos de los productos)
-    public/assets/hero-solar.jpg    (imagen del banner principal)
+    public/assets/hero-solar.webp   (banner principal optimizado)
+    public/assets/hero-solar.jpg    (original)
+  Las imágenes públicas de Supabase se solicitan en WebP y con un ancho máximo
+  para el catálogo; si Image Transformations no está disponible, se usa el original.
 
 - Textos del banner principal:
     src/components/catalogo.tsx  (sección "Hero")

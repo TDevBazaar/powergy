@@ -82,6 +82,7 @@ function ChipsProducto({ p, pequeno }: { p: Producto; pequeno?: boolean }) {
 
 function ImagenProducto({ p, alta }: { p: Producto; alta?: boolean }) {
   const [error, setError] = useState(false)
+  const [usarOriginal, setUsarOriginal] = useState(false)
   if (!p.primary_image || error) {
     return (
       <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-neutral-300">
@@ -92,12 +93,21 @@ function ImagenProducto({ p, alta }: { p: Producto; alta?: boolean }) {
       </div>
     )
   }
+  const urlOriginal = obtenerUrlImagen(p.primary_image)
+  const urlOptimizada = obtenerUrlImagen(p.primary_image, alta ? 960 : 640)
   return (
     <img
-      src={obtenerUrlImagen(p.primary_image)}
+      src={usarOriginal ? urlOriginal : urlOptimizada}
       alt={p.name}
       loading="lazy"
-      onError={() => setError(true)}
+      decoding="async"
+      onError={() => {
+        if (!usarOriginal && urlOptimizada !== urlOriginal) {
+          setUsarOriginal(true)
+        } else {
+          setError(true)
+        }
+      }}
       className="h-full w-full object-contain"
     />
   )
@@ -151,8 +161,6 @@ export default function Catalogo() {
   useEffect(() => {
     try {
       const crudo = localStorage.getItem(CLAVE_CARRITO)
-      // Cargar estado persistido al montar es un uso legítimo de setState en efecto.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (crudo) setCarrito(JSON.parse(crudo) as Carrito)
     } catch {
       /* ignora */
@@ -311,7 +319,13 @@ export default function Catalogo() {
             aria-label="POWERGY - volver arriba"
             className="shrink-0"
           >
-            <img src="/logo-powergy-claro.png" alt="POWERGY" className="h-8 w-auto md:h-9" />
+            <img
+              src="/logo-powergy-claro.webp"
+              alt="POWERGY"
+              width={180}
+              height={97}
+              className="h-8 w-auto md:h-9"
+            />
           </button>
           <div className="hidden flex-1 justify-center md:flex">
             <div className="relative w-full max-w-md">
@@ -397,14 +411,20 @@ export default function Catalogo() {
             </div>
             <div className="relative min-h-56 lg:min-h-[26rem]">
               <img
-                src="/assets/hero-solar.jpg"
+                src="/assets/hero-solar.webp"
                 alt="Paneles solares instalados en el techo de una casa"
+                width={1408}
+                height={768}
+                fetchPriority="high"
+                decoding="async"
                 className="absolute inset-0 h-full w-full object-cover lg:[mask-image:linear-gradient(to_right,transparent,black_28%)]"
               />
               <img
-                src="/logo-powergy-claro.png"
+                src="/logo-powergy-claro.webp"
                 alt=""
                 aria-hidden="true"
+                width={180}
+                height={97}
                 className="absolute right-6 top-6 hidden h-10 w-auto drop-shadow-sm lg:block xl:right-10"
               />
             </div>
@@ -450,9 +470,26 @@ export default function Catalogo() {
           </div>
           <div className="grid gap-4 md:grid-cols-2 md:gap-5">
             {cargandoCatalogo && (
-              <p role="status" className="text-sm text-neutral-500">
-                Cargando productos destacados...
-              </p>
+              <>
+                <p role="status" className="sr-only">
+                  Cargando productos destacados...
+                </p>
+                {[0, 1].map((item) => (
+                  <article
+                    key={item}
+                    aria-hidden="true"
+                    className="flex min-h-[200px] animate-pulse gap-4 rounded-2xl border border-neutral-100 bg-white p-4 shadow-sm"
+                  >
+                    <div className="h-32 w-28 shrink-0 rounded-xl bg-neutral-100 sm:h-36 sm:w-36" />
+                    <div className="flex min-w-0 flex-1 flex-col gap-3 py-1">
+                      <div className="h-4 w-24 rounded bg-neutral-100" />
+                      <div className="h-5 w-3/4 rounded bg-neutral-100" />
+                      <div className="h-4 w-full rounded bg-neutral-100" />
+                      <div className="mt-auto h-9 w-32 rounded-xl bg-neutral-100" />
+                    </div>
+                  </article>
+                ))}
+              </>
             )}
             {!cargandoCatalogo && !errorCatalogo && destacados.map((p) => (
               <article
@@ -523,7 +560,7 @@ export default function Catalogo() {
                   </button>
                 </div>
                 <div className="relative h-60 p-4 md:h-80 md:p-8">
-                  <div className="flex h-full w-full items-center justify-center rounded-2xl bg-white p-3 shadow-lg">
+                  <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-2xl bg-white p-3 shadow-lg">
                     <ImagenProducto p={bannerOferta} alta />
                   </div>
                 </div>
@@ -683,7 +720,13 @@ export default function Catalogo() {
           <div className="absolute inset-0 bg-black/40" onClick={() => setMenuAbierto(false)} />
           <div className="absolute inset-y-0 left-0 flex w-80 max-w-[85vw] flex-col bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-4">
-              <img src="/logo-powergy-claro.png" alt="POWERGY" className="h-8 w-auto" />
+              <img
+                src="/logo-powergy-claro.webp"
+                alt="POWERGY"
+                width={180}
+                height={97}
+                className="h-8 w-auto"
+              />
               <button
                 onClick={() => setMenuAbierto(false)}
                 aria-label="Cerrar menú"
