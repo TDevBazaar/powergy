@@ -47,21 +47,17 @@ function esPaginaProductos(value: unknown): value is PaginaProductos {
 
 const TAMANO_PAGINA = 100
 
-function urlApi(): string {
-  const base = process.env.NEXT_PUBLIC_POWERGY_API_URL?.trim()
-  return (base || 'https://powergy.somee.com').replace(/\/+$/, '')
-}
-
 export async function obtenerCatalogo(signal?: AbortSignal): Promise<Producto[]> {
   const productos: Producto[] = []
   let totalPaginas = 1
 
   for (let page = 1; page <= totalPaginas; page += 1) {
-    const url = new URL(`${urlApi()}/api/products`)
-    url.searchParams.set('page', String(page))
-    url.searchParams.set('pageSize', String(TAMANO_PAGINA))
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(TAMANO_PAGINA),
+    })
 
-    const response = await fetch(url, {
+    const response = await fetch(`/api/catalog?${params}`, {
       method: 'GET',
       headers: { Accept: 'application/json' },
       cache: 'no-store',

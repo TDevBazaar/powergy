@@ -65,7 +65,10 @@ PANEL DE ADMINISTRACIÓN:
   valores y reinicia el servidor Next.js.
 
 URL del API:
-  La tienda consulta https://powergy.somee.com por defecto.
+  La ruta /api/catalog de Next.js consulta el API y cachea cada página
+  durante 60 segundos en el servidor para evitar esperar a Somee en cada
+  visita. Los cambios del catálogo pueden tardar hasta 60 segundos en verse.
+  El API de origen es https://powergy.somee.com por defecto.
   Para apuntar a otro entorno, define NEXT_PUBLIC_POWERGY_API_URL
   en powergy-web/.env.local para desarrollo local, o en la
   configuración de entorno del hosting del frontend; por ejemplo:
