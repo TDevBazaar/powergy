@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } fr
 import {
   Search, X, Menu, ShoppingCart, ArrowRight, Plus, Minus, Trash2, Check,
   ShieldCheck, Truck, Headphones, Lock, Zap, Sun, Fuel, Package,
+  MessageCircle, ExternalLink,
 } from 'lucide-react'
 import { ORDEN_CATEGORIAS, type Producto } from '@/data/productos'
 import { obtenerCatalogo, registrarSolicitudPedido, type SolicitudCreada } from '@/lib/catalogo-api'
@@ -141,6 +142,7 @@ export default function Catalogo() {
   const [intentoCarga, setIntentoCarga] = useState(0)
   const [carrito, setCarrito] = useState<Carrito>({})
   const [toast, setToast] = useState<string | null>(null)
+  const [enlacePendiente, setEnlacePendiente] = useState<string | null>(null)
   const [registrandoPedido, setRegistrandoPedido] = useState(false)
   const registrandoPedidoRef = useRef(false)
   const claveSolicitudPendiente = useRef<{ fingerprint: string; key: string } | null>(null)
@@ -186,11 +188,12 @@ export default function Catalogo() {
 
   /* Bloquea el scroll del fondo cuando hay un panel abierto */
   useEffect(() => {
-    document.body.style.overflow = menuAbierto || carritoAbierto || detalle ? 'hidden' : ''
+    document.body.style.overflow =
+      menuAbierto || carritoAbierto || detalle || enlacePendiente ? 'hidden' : ''
     return () => {
       document.body.style.overflow = ''
     }
-  }, [menuAbierto, carritoAbierto, detalle])
+  }, [menuAbierto, carritoAbierto, detalle, enlacePendiente])
 
   /* Toast se auto-oculta */
   useEffect(() => {
@@ -206,6 +209,7 @@ export default function Catalogo() {
       setDetalle(null)
       setMenuAbierto(false)
       setCarritoAbierto(false)
+      setEnlacePendiente(null)
     }
     window.addEventListener('keydown', alPulsar)
     return () => window.removeEventListener('keydown', alPulsar)
@@ -271,8 +275,8 @@ export default function Catalogo() {
     fingerprint: string,
     construirMensaje: (order: SolicitudCreada) => string,
   ) {
-    // Intentamos abrir WhatsApp en una pestaña nueva; si el navegador bloquea
-    // las ventanas emergentes, continuamos en la pestaña actual.
+    // Intentamos abrir WhatsApp en una pestaña nueva. Si el navegador la
+    // bloquea, ofreceremos un enlace para abrirla con un clic del usuario.
     const ventanaWhatsApp = window.open('about:blank', '_blank')
     if (ventanaWhatsApp) ventanaWhatsApp.opener = null
 
@@ -290,8 +294,11 @@ export default function Catalogo() {
       const enlace = linkWhatsApp(construirMensaje(order))
       if (ventanaWhatsApp) {
         ventanaWhatsApp.location.href = enlace
+        setEnlacePendiente(null)
       } else {
-        window.location.href = enlace
+        // El navegador bloqueó la pestaña automática: mostramos un enlace real.
+        // Al ser un clic del usuario, se abre siempre en otra pestaña.
+        setEnlacePendiente(enlace)
       }
       claveSolicitudPendiente.current = null
     } catch (error) {
@@ -1041,6 +1048,40 @@ export default function Catalogo() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== Apertura de WhatsApp bloqueada: enlace real ===== */}
+      {enlacePendiente && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-xl">
+            <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#FFD21E]">
+              <MessageCircle className="h-6 w-6 text-neutral-900" />
+            </span>
+            <h3 className="text-base font-bold text-neutral-900">Solicitud registrada</h3>
+            <p className="mt-2 text-sm leading-relaxed text-neutral-600">
+              Tu navegador bloqueó la apertura automática. Pulsa el botón para abrir
+              WhatsApp en una pestaña nueva.
+            </p>
+            <a
+              href={enlacePendiente}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setEnlacePendiente(null)}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-neutral-900 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-neutral-800"
+            >
+              <MessageCircle className="h-4 w-4" />
+              Abrir WhatsApp
+              <ExternalLink className="h-4 w-4" />
+            </a>
+            <button
+              type="button"
+              onClick={() => setEnlacePendiente(null)}
+              className="mt-2 w-full rounded-xl px-4 py-2 text-xs font-semibold text-neutral-500 transition-colors hover:text-neutral-900"
+            >
+              Cerrar
+            </button>
           </div>
         </div>
       )}
