@@ -6,9 +6,9 @@ import {
   ShieldCheck, Truck, Headphones, Lock, Zap, Sun, Fuel, Package,
 } from 'lucide-react'
 import { ORDEN_CATEGORIAS, type Producto } from '@/data/productos'
-import { obtenerCatalogo, registrarSolicitudPedido } from '@/lib/catalogo-api'
+import { obtenerCatalogo, registrarSolicitudPedido, type SolicitudCreada } from '@/lib/catalogo-api'
 import { obtenerUrlImagen } from '@/lib/image-url'
-import { linkProducto, linkWhatsApp, linkGeneral, WHATSAPP_VISIBLE } from '@/lib/whatsapp'
+import { linkWhatsApp, linkGeneral, WHATSAPP_VISIBLE } from '@/lib/whatsapp'
 
 /* ---------- Utilidades ---------- */
 
@@ -21,6 +21,13 @@ function normalizar(s: string): string {
 
 function formatoPrecio(n: number): string {
   return `$ ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+/* Enlace directo a la solicitud dentro del panel de administración. */
+function urlAdminSolicitud(id: string): string {
+  const url = new URL('/admin', window.location.origin)
+  url.searchParams.set('order', id)
+  return url.toString()
 }
 
 function precioTexto(p: Producto): string {
@@ -259,10 +266,11 @@ export default function Catalogo() {
     .sort()
     .join('|')
 
-  async function enviarPedido(event: MouseEvent<HTMLButtonElement>) {
-    event.preventDefault()
-    if (registrandoPedidoRef.current || itemsCarrito.length === 0) return
-
+  async function registrarSolicitudWhatsApp(
+    items: Array<{ productId: string; quantity: number }>,
+    fingerprint: string,
+    construirMensaje: (order: SolicitudCreada) => string,
+  ) {
     const ventanaWhatsApp = window.open('about:blank', '_blank')
     if (!ventanaWhatsApp) {
       setToast('Permite las ventanas emergentes para continuar a WhatsApp.')
@@ -273,49 +281,81 @@ export default function Catalogo() {
     setRegistrandoPedido(true)
 
     const pending = claveSolicitudPendiente.current
-    const idempotencyKey = pending?.fingerprint === huellaCarrito
+    const idempotencyKey = pending?.fingerprint === fingerprint
       ? pending.key
       : crypto.randomUUID()
-    claveSolicitudPendiente.current = { fingerprint: huellaCarrito, key: idempotencyKey }
+    claveSolicitudPendiente.current = { fingerprint, key: idempotencyKey }
 
     try {
-      const order = await registrarSolicitudPedido(
-        itemsCarrito.map(({ p, cant }) => ({ productId: p.id, quantity: cant })),
-        idempotencyKey,
-      )
-      const lineas = order.items.map((item) => {
-        const precio = item.unitPriceUsd === null
-          ? 'precio por confirmar'
-          : formatoPrecio(item.unitPriceUsd)
-        return `• ${item.quantity} × ${item.productName} — ${precio}`
-      })
-      const total = order.estimatedTotalUsd === null
-        ? '\n\nTotal estimado: por confirmar'
-        : `\n\nTotal estimado: ${formatoPrecio(order.estimatedTotalUsd)}`
-      const adminUrl = new URL('/admin', window.location.origin)
-      adminUrl.searchParams.set('order', order.id)
-      const message = [
-        `Hola POWERGY, quiero hacer este pedido (${order.reference}):`,
-        '',
-        ...lineas,
-        total,
-        '',
-        `Abrir solicitud en administración: ${adminUrl.toString()}`,
-      ].join('\n')
-
-      ventanaWhatsApp.location.href = linkWhatsApp(message)
+      const order = await registrarSolicitudPedido(items, idempotencyKey)
+      ventanaWhatsApp.location.href = linkWhatsApp(construirMensaje(order))
       claveSolicitudPendiente.current = null
     } catch (error) {
       ventanaWhatsApp.close()
       setToast(
         error instanceof Error
-          ? `No se pudo registrar el pedido: ${error.message}`
-          : 'No se pudo registrar el pedido. Inténtalo nuevamente.',
+          ? `No se pudo registrar la solicitud: ${error.message}`
+          : 'No se pudo registrar la solicitud. Inténtalo nuevamente.',
       )
     } finally {
       registrandoPedidoRef.current = false
       setRegistrandoPedido(false)
     }
+  }
+
+  async function enviarPedido(event: MouseEvent<HTMLButtonElement>) {
+    event.preventDefault()
+    if (registrandoPedidoRef.current || itemsCarrito.length === 0) return
+
+    await registrarSolicitudWhatsApp(
+      itemsCarrito.map(({ p, cant }) => ({ productId: p.id, quantity: cant })),
+      huellaCarrito,
+      (order) => {
+        const lineas = order.items.map((item) => {
+          const precio = item.unitPriceUsd === null
+            ? 'precio por confirmar'
+            : formatoPrecio(item.unitPriceUsd)
+          return `• ${item.quantity} × ${item.productName} — ${precio}`
+        })
+        const total = order.estimatedTotalUsd === null
+          ? '\n\nTotal estimado: por confirmar'
+          : `\n\nTotal estimado: ${formatoPrecio(order.estimatedTotalUsd)}`
+        return [
+          `Hola POWERGY, quiero hacer este pedido (${order.reference}):`,
+          '',
+          ...lineas,
+          total,
+          '',
+          `Abrir solicitud en administración: ${urlAdminSolicitud(order.id)}`,
+        ].join('\n')
+      },
+    )
+  }
+
+  async function enviarConsulta(
+    event: MouseEvent<HTMLButtonElement>,
+    producto: Producto,
+  ) {
+    event.preventDefault()
+    if (registrandoPedidoRef.current) return
+
+    await registrarSolicitudWhatsApp(
+      [{ productId: producto.id, quantity: 1 }],
+      `consulta:${producto.id}`,
+      (order) => {
+        const item = order.items[0]
+        const precio = item && item.unitPriceUsd !== null
+          ? formatoPrecio(item.unitPriceUsd)
+          : 'precio por confirmar'
+        return [
+          `Hola POWERGY, quiero consultar por este producto (${order.reference}):`,
+          '',
+          `• ${producto.name} — ${precio}`,
+          '',
+          `Abrir solicitud en administración: ${urlAdminSolicitud(order.id)}`,
+        ].join('\n')
+      },
+    )
   }
 
   function agregar(id: string) {
@@ -985,14 +1025,15 @@ export default function Catalogo() {
                   >
                     <ShoppingCart className="h-4 w-4" /> Añadir al carrito
                   </button>
-                  <a
-                    href={linkProducto(detalle)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95 active:scale-[0.98]"
+                  <button
+                    type="button"
+                    onClick={(event) => void enviarConsulta(event, detalle)}
+                    disabled={registrandoPedido}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:brightness-95 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    <IconoWhatsApp className="h-4 w-4" /> Consultar
-                  </a>
+                    <IconoWhatsApp className="h-4 w-4" />
+                    {registrandoPedido ? 'Registrando...' : 'Consultar'}
+                  </button>
                 </div>
               </div>
             </div>
