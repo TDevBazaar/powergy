@@ -141,6 +141,148 @@ namespace Powergy.Api.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Powergy.Api.Models.CustomerOrder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_at");
+
+                    b.Property<Guid?>("ClosedByAdminUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("closed_by_admin_user_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<decimal?>("EstimatedTotalUsd")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("estimated_total_usd");
+
+                    b.Property<Guid>("IdempotencyKey")
+                        .HasColumnType("uuid")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClosedAt");
+
+                    b.HasIndex("ClosedByAdminUserId");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex("CreatedAt", "Id");
+
+                    b.HasIndex("Status", "CreatedAt", "Id");
+
+                    b.ToTable("customer_orders", (string)null);
+                });
+
+            modelBuilder.Entity("Powergy.Api.Models.CustomerOrderLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CategoryName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("category_name");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<string>("ProductId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("product_id");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)")
+                        .HasColumnName("product_name");
+
+                    b.Property<string>("ProductSlug")
+                        .IsRequired()
+                        .HasMaxLength(180)
+                        .HasColumnType("character varying(180)")
+                        .HasColumnName("product_slug");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<decimal?>("UnitPriceUsd")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("unit_price_usd");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId");
+
+                    b.ToTable("customer_order_lines", (string)null);
+                });
+
+            modelBuilder.Entity("Powergy.Api.Models.CustomerOrderStatusHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("ChangedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("changed_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid?>("ChangedByAdminUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("changed_by_admin_user_id");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<string>("PreviousStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("previous_status");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId", "ChangedAt");
+
+                    b.ToTable("customer_order_status_history", (string)null);
+                });
+
             modelBuilder.Entity("Powergy.Api.Models.Product", b =>
                 {
                     b.Property<string>("Id")
@@ -243,9 +385,43 @@ namespace Powergy.Api.Migrations
 
                     b.HasIndex("CategoryId", "IsActive");
 
-                    b.HasIndex("IsActive", "TopRank");
+                    b.HasIndex("TopRank", "Name", "Id");
+
+                    b.HasIndex("IsActive", "TopRank", "Name", "Id");
 
                     b.ToTable("products", (string)null);
+                });
+
+            modelBuilder.Entity("Powergy.Api.Models.CustomerOrder", b =>
+                {
+                    b.HasOne("Powergy.Api.Models.AdminUser", "ClosedByAdminUser")
+                        .WithMany("ClosedOrders")
+                        .HasForeignKey("ClosedByAdminUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("ClosedByAdminUser");
+                });
+
+            modelBuilder.Entity("Powergy.Api.Models.CustomerOrderLine", b =>
+                {
+                    b.HasOne("Powergy.Api.Models.CustomerOrder", "Order")
+                        .WithMany("Lines")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Order");
+                });
+
+            modelBuilder.Entity("Powergy.Api.Models.CustomerOrderStatusHistory", b =>
+                {
+                    b.HasOne("Powergy.Api.Models.CustomerOrder", "Order")
+                        .WithMany("StatusHistory")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Order");
                 });
 
             modelBuilder.Entity("Powergy.Api.Models.Product", b =>
@@ -259,9 +435,21 @@ namespace Powergy.Api.Migrations
                     b.Navigation("Category");
                 });
 
+            modelBuilder.Entity("Powergy.Api.Models.AdminUser", b =>
+                {
+                    b.Navigation("ClosedOrders");
+                });
+
             modelBuilder.Entity("Powergy.Api.Models.Category", b =>
                 {
                     b.Navigation("Products");
+                });
+
+            modelBuilder.Entity("Powergy.Api.Models.CustomerOrder", b =>
+                {
+                    b.Navigation("Lines");
+
+                    b.Navigation("StatusHistory");
                 });
 #pragma warning restore 612, 618
         }

@@ -7,6 +7,9 @@ ASP.NET Core 10 API with Entity Framework Core Code First and PostgreSQL on Supa
 - `categories`: catalog categories, URL slug, display order and active state.
 - `products`: catalog fields, nullable USD price, offer/service flags, image path, bestseller rank and active state.
 - `admin_users`: allowlist of Supabase Auth user IDs authorized to administer the catalog.
+- `customer_orders`: catalog order requests recorded before the customer opens WhatsApp, with an idempotency key, status, estimated total and closure metadata.
+- `customer_order_lines`: snapshot of the requested products (name, slug, category, quantity and unit price) for each order.
+- `customer_order_status_history`: append-only status transitions with the acting administrator and timestamp.
 
 The existing JSON catalog has 85 products across three categories. The initial migration creates the schema and seeds the three categories; it does not import products yet. Product IDs are strings so the current IDs can be preserved during the catalog import. `top_ventas` is represented by a nullable `top_rank` (a rank means featured); the JSON's duplicate `ecoflow-delta-2-max` slug must be made unique before importing.
 
@@ -98,6 +101,8 @@ Product POST requests accept an optional `id`; this allows importing the existin
 - `GET /api/products/{slug}` — active product.
 - `GET /api/categories/admin` and `GET /api/products/admin` — admin catalog views.
 - `POST`, `PUT` and `DELETE` under `/api/categories` and `/api/products` — admin-only category/product management. DELETE deactivates rather than permanently removing records.
+- `POST /api/orders` — records an idempotent WhatsApp order request for the catalog cart.
+- `GET /api/admin/orders`, `GET /api/admin/orders/metrics`, `GET /api/admin/orders/{id}` and `POST /api/admin/orders/{id}/close` — admin-only listing, statistics, detail and closure of order requests.
 - `GET /health` — API/database connectivity check.
 
 Product response fields preserve the current frontend catalog names (`price_usd`, `primary_image`, `oferta`, `garantia`, `transporte`, `factura`, `top_ventas`, `top_rank`). The admin panel uploads product images to the `powergy-product-images` Supabase Storage bucket and saves their public URLs in `primary_image`.

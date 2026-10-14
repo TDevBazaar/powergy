@@ -9,6 +9,10 @@ public sealed class PowergyDbContext(DbContextOptions<PowergyDbContext> options)
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<AdminUser> AdminUsers => Set<AdminUser>();
+    public DbSet<CustomerOrder> CustomerOrders => Set<CustomerOrder>();
+    public DbSet<CustomerOrderLine> CustomerOrderLines => Set<CustomerOrderLine>();
+    public DbSet<CustomerOrderStatusHistory> CustomerOrderStatusHistory =>
+        Set<CustomerOrderStatusHistory>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -96,7 +100,8 @@ public sealed class PowergyDbContext(DbContextOptions<PowergyDbContext> options)
                 .HasForeignKey(product => product.CategoryId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(product => new { product.CategoryId, product.IsActive });
-            entity.HasIndex(product => new { product.IsActive, product.TopRank });
+            entity.HasIndex(product => new { product.IsActive, product.TopRank, product.Name, product.Id });
+            entity.HasIndex(product => new { product.TopRank, product.Name, product.Id });
             entity.HasIndex(product => product.OnSale);
         });
 
@@ -113,6 +118,76 @@ public sealed class PowergyDbContext(DbContextOptions<PowergyDbContext> options)
             entity.HasIndex(admin => admin.SupabaseUserId).IsUnique();
             entity.Property(admin => admin.CreatedAt)
                 .HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+        });
+
+        modelBuilder.Entity<CustomerOrder>(entity =>
+        {
+            entity.ToTable("customer_orders");
+            entity.HasKey(order => order.Id);
+            entity.Property(order => order.Id).HasColumnName("id");
+            entity.Property(order => order.IdempotencyKey).HasColumnName("idempotency_key");
+            entity.HasIndex(order => order.IdempotencyKey).IsUnique();
+            entity.Property(order => order.Status).HasColumnName("status")
+                .HasMaxLength(20).IsRequired();
+            entity.Property(order => order.EstimatedTotalUsd)
+                .HasColumnName("estimated_total_usd").HasPrecision(12, 2);
+            entity.Property(order => order.CreatedAt)
+                .HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(order => order.ClosedAt).HasColumnName("closed_at");
+            entity.Property(order => order.ClosedByAdminUserId)
+                .HasColumnName("closed_by_admin_user_id");
+            entity.HasIndex(order => new { order.Status, order.CreatedAt, order.Id });
+            entity.HasIndex(order => new { order.CreatedAt, order.Id });
+            entity.HasIndex(order => order.ClosedAt);
+            entity.HasOne(order => order.ClosedByAdminUser)
+                .WithMany(admin => admin.ClosedOrders)
+                .HasForeignKey(order => order.ClosedByAdminUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<CustomerOrderLine>(entity =>
+        {
+            entity.ToTable("customer_order_lines");
+            entity.HasKey(line => line.Id);
+            entity.Property(line => line.Id).HasColumnName("id");
+            entity.Property(line => line.OrderId).HasColumnName("order_id");
+            entity.Property(line => line.ProductId).HasColumnName("product_id")
+                .HasMaxLength(100).IsRequired();
+            entity.Property(line => line.ProductName).HasColumnName("product_name")
+                .HasMaxLength(240).IsRequired();
+            entity.Property(line => line.ProductSlug).HasColumnName("product_slug")
+                .HasMaxLength(180).IsRequired();
+            entity.Property(line => line.CategoryName).HasColumnName("category_name")
+                .HasMaxLength(100).IsRequired();
+            entity.Property(line => line.Quantity).HasColumnName("quantity");
+            entity.Property(line => line.UnitPriceUsd).HasColumnName("unit_price_usd")
+                .HasPrecision(12, 2);
+            entity.HasIndex(line => line.OrderId);
+            entity.HasOne(line => line.Order)
+                .WithMany(order => order.Lines)
+                .HasForeignKey(line => line.OrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CustomerOrderStatusHistory>(entity =>
+        {
+            entity.ToTable("customer_order_status_history");
+            entity.HasKey(history => history.Id);
+            entity.Property(history => history.Id).HasColumnName("id");
+            entity.Property(history => history.OrderId).HasColumnName("order_id");
+            entity.Property(history => history.PreviousStatus).HasColumnName("previous_status")
+                .HasMaxLength(20);
+            entity.Property(history => history.Status).HasColumnName("status")
+                .HasMaxLength(20).IsRequired();
+            entity.Property(history => history.ChangedByAdminUserId)
+                .HasColumnName("changed_by_admin_user_id");
+            entity.Property(history => history.ChangedAt)
+                .HasColumnName("changed_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasIndex(history => new { history.OrderId, history.ChangedAt });
+            entity.HasOne(history => history.Order)
+                .WithMany(order => order.StatusHistory)
+                .HasForeignKey(history => history.OrderId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 

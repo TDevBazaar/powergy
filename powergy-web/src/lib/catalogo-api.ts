@@ -47,6 +47,28 @@ function esPaginaProductos(value: unknown): value is PaginaProductos {
 
 const TAMANO_PAGINA = 100
 
+export interface SolicitudCreada {
+  id: string
+  reference: string
+  estimatedTotalUsd: number | null
+  items: Array<{
+    productName: string
+    quantity: number
+    unitPriceUsd: number | null
+  }>
+}
+
+function esItemSolicitud(
+  value: unknown,
+): value is SolicitudCreada['items'][number] {
+  return (
+    esObjeto(value) &&
+    typeof value.productName === 'string' &&
+    typeof value.quantity === 'number' &&
+    (typeof value.unitPriceUsd === 'number' || value.unitPriceUsd === null)
+  )
+}
+
 export async function obtenerCatalogo(signal?: AbortSignal): Promise<Producto[]> {
   const productos: Producto[] = []
   let totalPaginas = 1
@@ -79,4 +101,60 @@ export async function obtenerCatalogo(signal?: AbortSignal): Promise<Producto[]>
   }
 
   return productos
+}
+
+export async function registrarSolicitudPedido(
+  items: Array<{ productId: string; quantity: number }>,
+  idempotencyKey: string,
+): Promise<SolicitudCreada> {
+  const response = await fetch('/api/orders', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      idempotencyKey,
+      items: items.map(({ productId, quantity }) => ({
+        productId,
+        quantity,
+      })),
+    }),
+    cache: 'no-store',
+  })
+
+  if (!response.ok) {
+    let detail = `No se pudo registrar la solicitud (HTTP ${response.status}).`
+    try {
+      const problem: unknown = await response.json()
+      if (
+        esObjeto(problem) &&
+        typeof problem.detail === 'string'
+      ) {
+        detail = problem.detail
+      }
+    } catch {
+      // Conserva el mensaje HTTP cuando la respuesta no contiene JSON.
+    }
+    throw new Error(detail)
+  }
+
+  const result: unknown = await response.json()
+  if (
+    !esObjeto(result) ||
+    typeof result.id !== 'string' ||
+    typeof result.reference !== 'string' ||
+    !(typeof result.estimatedTotalUsd === 'number' || result.estimatedTotalUsd === null) ||
+    !Array.isArray(result.items) ||
+    !result.items.every(esItemSolicitud)
+  ) {
+    throw new Error('La API devolvió una solicitud inválida.')
+  }
+
+  return {
+    id: result.id,
+    reference: result.reference,
+    estimatedTotalUsd: result.estimatedTotalUsd,
+    items: result.items,
+  }
 }

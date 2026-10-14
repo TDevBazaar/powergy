@@ -149,8 +149,7 @@ public sealed class ProductService(PowergyDbContext db) : IProductService
 
         var totalItems = await filteredQuery.CountAsync(cancellationToken);
         var items = await filteredQuery
-            .OrderBy(product => product.TopRank == null)
-            .ThenBy(product => product.TopRank)
+            .OrderBy(product => product.TopRank)
             .ThenBy(product => product.Name)
             .ThenBy(product => product.Id)
             .Skip((request.Page - 1) * request.PageSize)

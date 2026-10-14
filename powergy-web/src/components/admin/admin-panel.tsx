@@ -1,6 +1,7 @@
 'use client'
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -11,19 +12,26 @@ import Link from 'next/link'
 import type { Session, SupabaseClient } from '@supabase/supabase-js'
 import {
   actualizarProducto,
+  cerrarSolicitudAdmin,
   crearProducto,
   desactivarCategoria,
   desactivarProducto,
   guardarCategoria,
   obtenerCategoriasAdmin,
+  obtenerMetricasSolicitudes,
   obtenerProductosAdmin,
+  obtenerSolicitudAdmin,
+  obtenerSolicitudesAdmin,
   type CategoriaAdmin,
+  type MetricasSolicitudes,
+  type PaginaSolicitudes,
   type ProductoAdmin,
+  type SolicitudPedido,
 } from '@/lib/admin-api'
 import { getSupabaseClient } from '@/lib/supabase'
 import { obtenerUrlImagen } from '@/lib/image-url'
 
-type Pestaña = 'productos' | 'categorias'
+type Pestaña = 'productos' | 'categorias' | 'solicitudes'
 
 interface FormularioProducto {
   slug: string
@@ -87,6 +95,51 @@ function mensajeError(error: unknown): string {
   return error instanceof Error ? error.message : 'Ocurrió un error inesperado.'
 }
 
+function formatoMoneda(valor: number | null): string {
+  if (valor === null) return 'Por confirmar'
+  return new Intl.NumberFormat('es-VE', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 2,
+  }).format(valor)
+}
+
+function formatoFechaHora(valor: string): string {
+  const fecha = new Date(valor)
+  if (Number.isNaN(fecha.getTime())) return '—'
+  return fecha.toLocaleString('es-VE', { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+function etiquetaEstado(estado: SolicitudPedido['status']): string {
+  return estado === 'closed' ? 'Cerrada' : 'Solicitada'
+}
+
+function inicioDeDia(fecha: string): string | undefined {
+  return fecha ? `${fecha}T00:00:00Z` : undefined
+}
+
+function finDeDia(fecha: string): string | undefined {
+  return fecha ? `${fecha}T23:59:59Z` : undefined
+}
+
+function TarjetaMetrica({
+  titulo,
+  valor,
+  detalle,
+}: {
+  titulo: string
+  valor: string
+  detalle?: string
+}) {
+  return (
+    <div className="rounded-xl border border-neutral-100 bg-neutral-50 px-4 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">{titulo}</p>
+      <p className="mt-1 text-xl font-extrabold text-neutral-900">{valor}</p>
+      {detalle && <p className="mt-0.5 text-[11px] text-neutral-400">{detalle}</p>}
+    </div>
+  )
+}
+
 function campoFormulario(
   label: string,
   value: string,
@@ -131,6 +184,16 @@ export default function AdminPanel() {
     useState<FormularioCategoria>(categoriaVacia)
   const [categoriaEnEdicion, setCategoriaEnEdicion] = useState<string | null>(null)
   const [busqueda, setBusqueda] = useState('')
+  const [solicitudes, setSolicitudes] = useState<PaginaSolicitudes | null>(null)
+  const [metricas, setMetricas] = useState<MetricasSolicitudes | null>(null)
+  const [solicitudSeleccionada, setSolicitudSeleccionada] =
+    useState<SolicitudPedido | null>(null)
+  const [filtroEstado, setFiltroEstado] = useState<'' | 'requested' | 'closed'>('')
+  const [solicitudesDesde, setSolicitudesDesde] = useState('')
+  const [solicitudesHasta, setSolicitudesHasta] = useState('')
+  const [paginaSolicitudes, setPaginaSolicitudes] = useState(1)
+  const [cargandoSolicitudes, setCargandoSolicitudes] = useState(false)
+  const [cerrandoSolicitud, setCerrandoSolicitud] = useState(false)
 
   useEffect(() => {
     let activo = true
@@ -205,6 +268,65 @@ export default function AdminPanel() {
     }
   }, [session])
 
+  const cargarSolicitudes = useCallback(
+    async (pagina: number) => {
+      if (!session) return
+      setCargandoSolicitudes(true)
+      setPanelError('')
+      try {
+        const [paginaPedidos, metricasPedidos] = await Promise.all([
+          obtenerSolicitudesAdmin(session.access_token, {
+            status: filtroEstado || undefined,
+            from: inicioDeDia(solicitudesDesde),
+            to: finDeDia(solicitudesHasta),
+            page: pagina,
+          }),
+          obtenerMetricasSolicitudes(
+            session.access_token,
+            inicioDeDia(solicitudesDesde),
+            finDeDia(solicitudesHasta),
+          ),
+        ])
+        setSolicitudes(paginaPedidos)
+        setMetricas(metricasPedidos)
+      } catch (error) {
+        setPanelError(mensajeError(error))
+      } finally {
+        setCargandoSolicitudes(false)
+      }
+    },
+    [session, filtroEstado, solicitudesDesde, solicitudesHasta],
+  )
+
+  useEffect(() => {
+    if (!session || pestaña !== 'solicitudes') return
+    void cargarSolicitudes(paginaSolicitudes)
+  }, [session, pestaña, paginaSolicitudes, cargarSolicitudes])
+
+  useEffect(() => {
+    if (!session) return
+    const parametro = new URLSearchParams(window.location.search).get('order')
+    if (!parametro) return
+
+    setPestaña('solicitudes')
+    const url = new URL(window.location.href)
+    url.searchParams.delete('order')
+    window.history.replaceState({}, '', url.toString())
+
+    let activo = true
+    obtenerSolicitudAdmin(session.access_token, parametro)
+      .then((solicitud) => {
+        if (activo) setSolicitudSeleccionada(solicitud)
+      })
+      .catch((error: unknown) => {
+        if (activo) setPanelError(mensajeError(error))
+      })
+
+    return () => {
+      activo = false
+    }
+  }, [session])
+
   const productosFiltrados = useMemo(() => {
     const termino = busqueda.trim().toLocaleLowerCase()
     if (!termino) return productos
@@ -252,6 +374,42 @@ export default function AdminPanel() {
       setPanelError(mensajeError(error))
     } finally {
       setLoading(false)
+    }
+  }
+
+  function actualizarSeccion() {
+    if (pestaña === 'solicitudes') {
+      void cargarSolicitudes(paginaSolicitudes)
+    } else {
+      void recargarDatos()
+    }
+  }
+
+  async function abrirSolicitud(id: string) {
+    if (!session) return
+    setPanelError('')
+    try {
+      setSolicitudSeleccionada(await obtenerSolicitudAdmin(session.access_token, id))
+    } catch (error) {
+      setPanelError(mensajeError(error))
+    }
+  }
+
+  async function cerrarSolicitud(solicitud: SolicitudPedido) {
+    if (!session || solicitud.status === 'closed') return
+    if (!window.confirm(`¿Cerrar la solicitud ${solicitud.reference}?`)) return
+    setCerrandoSolicitud(true)
+    setPanelError('')
+    setNotice('')
+    try {
+      const actualizada = await cerrarSolicitudAdmin(session.access_token, solicitud.id)
+      setSolicitudSeleccionada(actualizada)
+      setNotice(`Solicitud ${actualizada.reference} cerrada.`)
+      await cargarSolicitudes(paginaSolicitudes)
+    } catch (error) {
+      setPanelError(mensajeError(error))
+    } finally {
+      setCerrandoSolicitud(false)
     }
   }
 
@@ -480,7 +638,7 @@ export default function AdminPanel() {
 
       <div className="mx-auto max-w-7xl px-4 py-7 md:px-8 md:py-10">
         <nav aria-label="Secciones del panel" className="mb-6 flex gap-2">
-          {(['productos', 'categorias'] as const).map((section) => (
+          {(['productos', 'categorias', 'solicitudes'] as const).map((section) => (
             <button
               key={section}
               type="button"
@@ -497,7 +655,7 @@ export default function AdminPanel() {
           ))}
           <button
             type="button"
-            onClick={() => void recargarDatos()}
+            onClick={actualizarSeccion}
             className="ml-auto rounded-full bg-white px-4 py-2 text-sm font-semibold text-neutral-600 transition hover:bg-neutral-100"
           >
             Actualizar
@@ -518,7 +676,266 @@ export default function AdminPanel() {
           </p>
         )}
 
-        {pestaña === 'productos' ? (
+        {pestaña === 'solicitudes' ? (
+          <div className="space-y-6">
+            <section className="rounded-2xl bg-white p-5 shadow-sm md:p-6">
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-extrabold text-neutral-900">Solicitudes de pedido</h2>
+                  <p className="mt-1 text-sm text-neutral-500">
+                    Pedidos registrados desde el catálogo antes de abrir WhatsApp.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className="grid gap-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+                    Desde
+                    <input
+                      type="date"
+                      value={solicitudesDesde}
+                      onChange={(event) => {
+                        setSolicitudesDesde(event.target.value)
+                        setPaginaSolicitudes(1)
+                      }}
+                      className="h-10 rounded-lg border border-neutral-200 px-3 text-sm font-normal normal-case text-neutral-900 outline-none focus:border-neutral-400"
+                    />
+                  </label>
+                  <label className="grid gap-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+                    Hasta
+                    <input
+                      type="date"
+                      value={solicitudesHasta}
+                      onChange={(event) => {
+                        setSolicitudesHasta(event.target.value)
+                        setPaginaSolicitudes(1)
+                      }}
+                      className="h-10 rounded-lg border border-neutral-200 px-3 text-sm font-normal normal-case text-neutral-900 outline-none focus:border-neutral-400"
+                    />
+                  </label>
+                  <label className="grid gap-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+                    Estado
+                    <select
+                      value={filtroEstado}
+                      onChange={(event) => {
+                        setFiltroEstado(event.target.value as '' | 'requested' | 'closed')
+                        setPaginaSolicitudes(1)
+                      }}
+                      className="h-10 rounded-lg border border-neutral-200 bg-white px-3 text-sm font-normal normal-case text-neutral-900 outline-none focus:border-neutral-400"
+                    >
+                      <option value="">Todas</option>
+                      <option value="requested">Solicitadas</option>
+                      <option value="closed">Cerradas</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <TarjetaMetrica titulo="Solicitudes" valor={metricas ? String(metricas.requests) : '—'} />
+                <TarjetaMetrica titulo="Cerradas" valor={metricas ? String(metricas.closedRequests) : '—'} />
+                <TarjetaMetrica titulo="Abiertas" valor={metricas ? String(metricas.openRequests) : '—'} />
+                <TarjetaMetrica
+                  titulo="Tasa de cierre"
+                  valor={
+                    metricas && metricas.closeRate !== null
+                      ? `${Math.round(metricas.closeRate * 100)}%`
+                      : '—'
+                  }
+                />
+                <TarjetaMetrica
+                  titulo="Valor estimado"
+                  valor={formatoMoneda(metricas?.estimatedValueUsd ?? null)}
+                />
+                <TarjetaMetrica
+                  titulo="Valor cerrado"
+                  valor={formatoMoneda(metricas?.closedEstimatedValueUsd ?? null)}
+                />
+                <TarjetaMetrica
+                  titulo="Cerradas en el período"
+                  valor={metricas ? String(metricas.closedDuringPeriod) : '—'}
+                />
+              </div>
+              {metricas && (
+                <p className="mt-3 text-[11px] text-neutral-400">
+                  Período: {formatoFechaHora(metricas.from)} — {formatoFechaHora(metricas.to)}
+                </p>
+              )}
+            </section>
+
+            <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(22rem,0.85fr)]">
+              <section className="rounded-2xl bg-white p-5 shadow-sm md:p-6">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-lg font-extrabold text-neutral-900">Listado</h2>
+                  <span className="text-sm text-neutral-500">
+                    {cargandoSolicitudes
+                      ? 'Cargando...'
+                      : `${solicitudes?.totalItems ?? 0} solicitudes`}
+                  </span>
+                </div>
+
+                {solicitudes && solicitudes.items.length > 0 ? (
+                  <div className="mt-5 divide-y divide-neutral-100">
+                    {solicitudes.items.map((solicitud) => (
+                      <article
+                        key={solicitud.id}
+                        className="flex flex-wrap items-center justify-between gap-3 py-4 first:pt-0 last:pb-0"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate text-sm font-bold text-neutral-900">{solicitud.reference}</p>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                solicitud.status === 'closed'
+                                  ? 'bg-green-50 text-green-700'
+                                  : 'bg-amber-50 text-amber-700'
+                              }`}
+                            >
+                              {etiquetaEstado(solicitud.status)}
+                            </span>
+                          </div>
+                          <p className="mt-1 truncate text-xs text-neutral-500">
+                            {formatoFechaHora(solicitud.createdAt)} ·{' '}
+                            {solicitud.items.reduce((total, item) => total + item.quantity, 0)} artículos ·{' '}
+                            {formatoMoneda(solicitud.estimatedTotalUsd)}
+                          </p>
+                          <p className="mt-0.5 truncate text-xs text-neutral-400">
+                            {solicitud.items
+                              .map((item) => `${item.quantity}× ${item.productName}`)
+                              .join(', ')}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void abrirSolicitud(solicitud.id)}
+                          className="text-xs font-semibold text-neutral-700 underline underline-offset-2"
+                        >
+                          Ver detalle
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="py-10 text-center text-sm text-neutral-500">
+                    {cargandoSolicitudes
+                      ? 'Cargando solicitudes...'
+                      : 'No hay solicitudes para los filtros seleccionados.'}
+                  </p>
+                )}
+
+                {solicitudes && solicitudes.totalPages > 1 && (
+                  <div className="mt-5 flex items-center justify-between gap-3 text-xs font-semibold text-neutral-500">
+                    <button
+                      type="button"
+                      disabled={paginaSolicitudes <= 1 || cargandoSolicitudes}
+                      onClick={() => setPaginaSolicitudes((pagina) => Math.max(1, pagina - 1))}
+                      className="rounded-lg border border-neutral-200 px-3 py-1.5 disabled:opacity-40"
+                    >
+                      Anterior
+                    </button>
+                    <span>
+                      Página {solicitudes.page} de {solicitudes.totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={paginaSolicitudes >= solicitudes.totalPages || cargandoSolicitudes}
+                      onClick={() => setPaginaSolicitudes((pagina) => pagina + 1)}
+                      className="rounded-lg border border-neutral-200 px-3 py-1.5 disabled:opacity-40"
+                    >
+                      Siguiente
+                    </button>
+                  </div>
+                )}
+              </section>
+
+              <section className="rounded-2xl bg-white p-5 shadow-sm md:p-6">
+                <h2 className="text-lg font-extrabold text-neutral-900">Detalle de la solicitud</h2>
+                {solicitudSeleccionada ? (
+                  <div className="mt-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-bold text-neutral-900">{solicitudSeleccionada.reference}</p>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                          solicitudSeleccionada.status === 'closed'
+                            ? 'bg-green-50 text-green-700'
+                            : 'bg-amber-50 text-amber-700'
+                        }`}
+                      >
+                        {etiquetaEstado(solicitudSeleccionada.status)}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-neutral-500">
+                      Creada el {formatoFechaHora(solicitudSeleccionada.createdAt)}
+                      {solicitudSeleccionada.closedAt
+                        ? ` · Cerrada el ${formatoFechaHora(solicitudSeleccionada.closedAt)}`
+                        : null}
+                    </p>
+
+                    <ul className="mt-4 divide-y divide-neutral-100 border-y border-neutral-100">
+                      {solicitudSeleccionada.items.map((item) => (
+                        <li key={item.productId} className="flex items-start justify-between gap-3 py-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-neutral-800">
+                              {item.productName}
+                            </p>
+                            <p className="mt-0.5 text-xs text-neutral-500">
+                              {item.quantity} × {formatoMoneda(item.unitPriceUsd)} · {item.categoryName}
+                            </p>
+                          </div>
+                          <span className="shrink-0 text-sm font-bold text-neutral-900">
+                            {formatoMoneda(item.lineTotalUsd)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+
+                    <div className="mt-4 flex items-center justify-between">
+                      <span className="text-sm text-neutral-500">Total estimado</span>
+                      <span className="text-lg font-extrabold text-neutral-900">
+                        {formatoMoneda(solicitudSeleccionada.estimatedTotalUsd)}
+                      </span>
+                    </div>
+
+                    <div className="mt-5">
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
+                        Historial
+                      </h3>
+                      <ol className="mt-2 space-y-2">
+                        {solicitudSeleccionada.history.map((registro, indice) => (
+                          <li
+                            key={`${registro.status}-${registro.changedAt}-${indice}`}
+                            className="text-xs text-neutral-500"
+                          >
+                            <span className="font-semibold text-neutral-700">
+                              {etiquetaEstado(registro.status as SolicitudPedido['status'])}
+                            </span>
+                            {' · '}
+                            {formatoFechaHora(registro.changedAt)}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => void cerrarSolicitud(solicitudSeleccionada)}
+                      disabled={solicitudSeleccionada.status === 'closed' || cerrandoSolicitud}
+                      className="mt-5 h-11 w-full rounded-xl bg-neutral-900 px-4 text-sm font-bold text-white transition hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {solicitudSeleccionada.status === 'closed'
+                        ? 'Solicitud cerrada'
+                        : cerrandoSolicitud
+                          ? 'Cerrando...'
+                          : 'Cerrar solicitud'}
+                    </button>
+                  </div>
+                ) : (
+                  <p className="py-10 text-center text-sm text-neutral-500">
+                    Selecciona una solicitud del listado para ver su detalle.
+                  </p>
+                )}
+              </section>
+            </div>
+          </div>
+        ) : pestaña === 'productos' ? (
           <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(21rem,0.8fr)]">
             <section className="rounded-2xl bg-white p-5 shadow-sm md:p-6">
               <div className="flex flex-wrap items-end justify-between gap-3">

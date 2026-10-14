@@ -35,9 +35,92 @@ interface Pagina<T> {
   totalPages: number
 }
 
+export interface ItemSolicitud {
+  productId: string
+  productName: string
+  productSlug: string
+  categoryName: string
+  quantity: number
+  unitPriceUsd: number | null
+  lineTotalUsd: number | null
+}
+
+export interface HistorialSolicitud {
+  previousStatus: string | null
+  status: string
+  changedByAdminUserId: string | null
+  changedAt: string
+}
+
+export interface SolicitudPedido {
+  id: string
+  reference: string
+  status: 'requested' | 'closed'
+  estimatedTotalUsd: number | null
+  createdAt: string
+  closedAt: string | null
+  closedByAdminUserId: string | null
+  items: ItemSolicitud[]
+  history: HistorialSolicitud[]
+}
+
+export interface MetricasSolicitudes {
+  from: string
+  to: string
+  requests: number
+  closedRequests: number
+  openRequests: number
+  estimatedValueUsd: number | null
+  closedEstimatedValueUsd: number | null
+  closeRate: number | null
+  closedDuringPeriod: number
+}
+
+export interface PaginaSolicitudes {
+  items: SolicitudPedido[]
+  page: number
+  pageSize: number
+  totalItems: number
+  totalPages: number
+}
+
 const API_URL = (
   process.env.NEXT_PUBLIC_POWERGY_API_URL || 'https://powergy.somee.com'
 ).replace(/\/+$/, '')
+
+async function mensajeErrorApi(response: Response): Promise<string> {
+  let detail = `La API respondió con HTTP ${response.status}.`
+  try {
+    const problem: unknown = await response.json()
+    if (
+      typeof problem === 'object' &&
+      problem !== null &&
+      'detail' in problem &&
+      typeof problem.detail === 'string'
+    ) {
+      detail = problem.detail
+    } else if (
+      typeof problem === 'object' &&
+      problem !== null &&
+      'title' in problem &&
+      typeof problem.title === 'string'
+    ) {
+      detail = problem.title
+    }
+  } catch {
+    // Conserva el mensaje HTTP cuando la respuesta no contiene JSON.
+  }
+  return detail
+}
+
+function cabecerasAdmin(token: string, init: RequestInit): HeadersInit {
+  return {
+    Accept: 'application/json',
+    Authorization: `Bearer ${token}`,
+    ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+    ...init.headers,
+  }
+}
 
 async function solicitarApi<T>(
   ruta: string,
@@ -46,41 +129,33 @@ async function solicitarApi<T>(
 ): Promise<T | null> {
   const response = await fetch(`${API_URL}${ruta}`, {
     ...init,
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
-      ...init.headers,
-    },
+    headers: cabecerasAdmin(token, init),
     cache: 'no-store',
   })
 
   if (!response.ok) {
-    let detail = `La API respondió con HTTP ${response.status}.`
-    try {
-      const problem: unknown = await response.json()
-      if (
-        typeof problem === 'object' &&
-        problem !== null &&
-        'detail' in problem &&
-        typeof problem.detail === 'string'
-      ) {
-        detail = problem.detail
-      } else if (
-        typeof problem === 'object' &&
-        problem !== null &&
-        'title' in problem &&
-        typeof problem.title === 'string'
-      ) {
-        detail = problem.title
-      }
-    } catch {
-      // Conserva el mensaje HTTP cuando la respuesta no contiene JSON.
-    }
-    throw new Error(detail)
+    throw new Error(await mensajeErrorApi(response))
   }
 
   if (response.status === 204) return null
+  return (await response.json()) as T
+}
+
+async function solicitarApiAdmin<T>(
+  ruta: string,
+  token: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const response = await fetch(ruta, {
+    ...init,
+    headers: cabecerasAdmin(token, init),
+    cache: 'no-store',
+  })
+
+  if (!response.ok) {
+    throw new Error(await mensajeErrorApi(response))
+  }
+
   return (await response.json()) as T
 }
 
@@ -157,4 +232,57 @@ export function guardarCategoria(
 
 export function desactivarCategoria(token: string, id: string): Promise<null> {
   return solicitarApi<never>(`/api/categories/${encodeURIComponent(id)}`, token, { method: 'DELETE' })
+}
+
+export async function obtenerSolicitudesAdmin(
+  token: string,
+  options: { status?: string; from?: string; to?: string; page?: number } = {},
+): Promise<PaginaSolicitudes> {
+  const params = new URLSearchParams({
+    page: String(options.page ?? 1),
+    pageSize: '25',
+  })
+  if (options.status) params.set('status', options.status)
+  if (options.from) params.set('from', options.from)
+  if (options.to) params.set('to', options.to)
+  return solicitarApiAdmin<PaginaSolicitudes>(
+    `/api/admin/orders?${params}`,
+    token,
+  )
+}
+
+export async function obtenerMetricasSolicitudes(
+  token: string,
+  from?: string,
+  to?: string,
+): Promise<MetricasSolicitudes> {
+  const params = new URLSearchParams()
+  if (from) params.set('from', from)
+  if (to) params.set('to', to)
+  const query = params.size ? `?${params}` : ''
+  return solicitarApiAdmin<MetricasSolicitudes>(
+    `/api/admin/orders/metrics${query}`,
+    token,
+  )
+}
+
+export function obtenerSolicitudAdmin(
+  token: string,
+  id: string,
+): Promise<SolicitudPedido> {
+  return solicitarApiAdmin<SolicitudPedido>(
+    `/api/admin/orders/${encodeURIComponent(id)}`,
+    token,
+  )
+}
+
+export function cerrarSolicitudAdmin(
+  token: string,
+  id: string,
+): Promise<SolicitudPedido> {
+  return solicitarApiAdmin<SolicitudPedido>(
+    `/api/admin/orders/${encodeURIComponent(id)}/close`,
+    token,
+    { method: 'POST' },
+  )
 }

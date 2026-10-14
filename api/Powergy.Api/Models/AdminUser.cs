@@ -8,4 +8,5 @@ public sealed class AdminUser
     public required string Role { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; }
+    public ICollection<CustomerOrder> ClosedOrders { get; set; } = new List<CustomerOrder>();
 }

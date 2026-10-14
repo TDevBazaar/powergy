@@ -1,12 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import {
   Search, X, Menu, ShoppingCart, ArrowRight, Plus, Minus, Trash2, Check,
   ShieldCheck, Truck, Headphones, Lock, Zap, Sun, Fuel, Package,
 } from 'lucide-react'
 import { ORDEN_CATEGORIAS, type Producto } from '@/data/productos'
-import { obtenerCatalogo } from '@/lib/catalogo-api'
+import { obtenerCatalogo, registrarSolicitudPedido } from '@/lib/catalogo-api'
 import { obtenerUrlImagen } from '@/lib/image-url'
 import { linkProducto, linkWhatsApp, linkGeneral, WHATSAPP_VISIBLE } from '@/lib/whatsapp'
 
@@ -134,6 +134,9 @@ export default function Catalogo() {
   const [intentoCarga, setIntentoCarga] = useState(0)
   const [carrito, setCarrito] = useState<Carrito>({})
   const [toast, setToast] = useState<string | null>(null)
+  const [registrandoPedido, setRegistrandoPedido] = useState(false)
+  const registrandoPedidoRef = useRef(false)
+  const claveSolicitudPendiente = useRef<{ fingerprint: string; key: string } | null>(null)
 
   const cargarCatalogo = useCallback(async (signal: AbortSignal) => {
     try {
@@ -251,15 +254,69 @@ export default function Catalogo() {
     0
   )
 
-  const linkPedido = useMemo(() => {
-    if (itemsCarrito.length === 0) return linkGeneral()
-    const lineas = itemsCarrito.map((x) => {
-      const precio = tienePrecio(x.p) ? formatoPrecio(x.p.price_usd as number) : 'precio por confirmar'
-      return `• ${x.cant} × ${x.p.name} — ${precio}`
-    })
-    const total = totalUSD > 0 ? `\n\nTotal estimado: ${formatoPrecio(totalUSD)}` : ''
-    return linkWhatsApp(`Hola POWERGY, quiero hacer este pedido:\n\n${lineas.join('\n')}${total}`)
-  }, [itemsCarrito, totalUSD])
+  const huellaCarrito = itemsCarrito
+    .map(({ p, cant }) => `${p.id}:${cant}`)
+    .sort()
+    .join('|')
+
+  async function enviarPedido(event: MouseEvent<HTMLButtonElement>) {
+    event.preventDefault()
+    if (registrandoPedidoRef.current || itemsCarrito.length === 0) return
+
+    const ventanaWhatsApp = window.open('about:blank', '_blank')
+    if (!ventanaWhatsApp) {
+      setToast('Permite las ventanas emergentes para continuar a WhatsApp.')
+      return
+    }
+    ventanaWhatsApp.opener = null
+    registrandoPedidoRef.current = true
+    setRegistrandoPedido(true)
+
+    const pending = claveSolicitudPendiente.current
+    const idempotencyKey = pending?.fingerprint === huellaCarrito
+      ? pending.key
+      : crypto.randomUUID()
+    claveSolicitudPendiente.current = { fingerprint: huellaCarrito, key: idempotencyKey }
+
+    try {
+      const order = await registrarSolicitudPedido(
+        itemsCarrito.map(({ p, cant }) => ({ productId: p.id, quantity: cant })),
+        idempotencyKey,
+      )
+      const lineas = order.items.map((item) => {
+        const precio = item.unitPriceUsd === null
+          ? 'precio por confirmar'
+          : formatoPrecio(item.unitPriceUsd)
+        return `• ${item.quantity} × ${item.productName} — ${precio}`
+      })
+      const total = order.estimatedTotalUsd === null
+        ? '\n\nTotal estimado: por confirmar'
+        : `\n\nTotal estimado: ${formatoPrecio(order.estimatedTotalUsd)}`
+      const adminUrl = new URL('/admin', window.location.origin)
+      adminUrl.searchParams.set('order', order.id)
+      const message = [
+        `Hola POWERGY, quiero hacer este pedido (${order.reference}):`,
+        '',
+        ...lineas,
+        total,
+        '',
+        `Abrir solicitud en administración: ${adminUrl.toString()}`,
+      ].join('\n')
+
+      ventanaWhatsApp.location.href = linkWhatsApp(message)
+      claveSolicitudPendiente.current = null
+    } catch (error) {
+      ventanaWhatsApp.close()
+      setToast(
+        error instanceof Error
+          ? `No se pudo registrar el pedido: ${error.message}`
+          : 'No se pudo registrar el pedido. Inténtalo nuevamente.',
+      )
+    } finally {
+      registrandoPedidoRef.current = false
+      setRegistrandoPedido(false)
+    }
+  }
 
   function agregar(id: string) {
     setCarrito((c) => ({ ...c, [id]: (c[id] ?? 0) + 1 }))
@@ -846,16 +903,17 @@ export default function Catalogo() {
                     <span className="text-sm text-neutral-500">Total estimado</span>
                     <span className="text-xl font-extrabold tracking-tight">{formatoPrecio(totalUSD)}</span>
                   </div>
-                  <a
-                    href={linkPedido}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 py-3.5 text-sm font-bold text-white shadow-sm transition hover:brightness-95 active:scale-[0.99]"
+                  <button
+                    type="button"
+                    onClick={(event) => void enviarPedido(event)}
+                    disabled={registrandoPedido}
+                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 py-3.5 text-sm font-bold text-white shadow-sm transition hover:brightness-95 active:scale-[0.99] disabled:cursor-wait disabled:opacity-70"
                   >
-                    <IconoWhatsApp className="h-5 w-5" /> Pedir por WhatsApp
-                  </a>
+                    <IconoWhatsApp className="h-5 w-5" />
+                    {registrandoPedido ? 'Registrando solicitud...' : 'Pedir por WhatsApp'}
+                  </button>
                   <div className="mt-2 flex items-center justify-between">
-                    <p className="text-[11px] text-neutral-400">Te atendemos por WhatsApp, sin registros.</p>
+                    <p className="text-[11px] text-neutral-400">Registramos tu solicitud y te atendemos por WhatsApp.</p>
                     <button
                       onClick={() => setCarrito({})}
                       className="text-[11px] font-semibold text-neutral-400 underline hover:text-neutral-600"
