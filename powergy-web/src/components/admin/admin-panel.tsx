@@ -9,6 +9,7 @@ import {
   type ChangeEvent,
 } from 'react'
 import Link from 'next/link'
+import { Pencil, Plus, Trash2, X } from 'lucide-react'
 import type { Session, SupabaseClient } from '@supabase/supabase-js'
 import {
   actualizarProducto,
@@ -104,6 +105,11 @@ function formatoMoneda(valor: number | null): string {
   }).format(valor)
 }
 
+function precioProducto(valor: number | null): string {
+  if (valor === null || valor <= 0) return 'Consultar'
+  return `$ ${valor.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
 function formatoFechaHora(valor: string): string {
   const fecha = new Date(valor)
   if (Number.isNaN(fecha.getTime())) return '—'
@@ -178,6 +184,7 @@ export default function AdminPanel() {
   const [productos, setProductos] = useState<ProductoAdmin[]>([])
   const [categorias, setCategorias] = useState<CategoriaAdmin[]>([])
   const [productoEnEdicion, setProductoEnEdicion] = useState<string | null>(null)
+  const [modalProductoAbierto, setModalProductoAbierto] = useState(false)
   const [formularioProducto, setFormularioProducto] =
     useState<FormularioProducto>(productoVacio)
   const [formularioCategoria, setFormularioCategoria] =
@@ -338,6 +345,22 @@ export default function AdminPanel() {
     )
   }, [busqueda, productos])
 
+  useEffect(() => {
+    if (!modalProductoAbierto) return
+    function alPulsar(event: KeyboardEvent) {
+      if (event.key !== 'Escape') return
+      setModalProductoAbierto(false)
+      setProductoEnEdicion(null)
+      setFormularioProducto(productoVacio)
+    }
+    window.addEventListener('keydown', alPulsar)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', alPulsar)
+      document.body.style.overflow = ''
+    }
+  }, [modalProductoAbierto])
+
   async function iniciarSesion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!supabase) return
@@ -432,7 +455,19 @@ export default function AdminPanel() {
       topRank: producto.top_rank === null ? '' : String(producto.top_rank),
       isActive: producto.isActive,
     })
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    setModalProductoAbierto(true)
+  }
+
+  function abrirProductoNuevo() {
+    setProductoEnEdicion(null)
+    setFormularioProducto(productoVacio)
+    setModalProductoAbierto(true)
+  }
+
+  function cerrarModalProducto() {
+    setModalProductoAbierto(false)
+    setProductoEnEdicion(null)
+    setFormularioProducto(productoVacio)
   }
 
   async function guardarProducto(event: FormEvent<HTMLFormElement>) {
@@ -458,6 +493,7 @@ export default function AdminPanel() {
       }
       setProductoEnEdicion(null)
       setFormularioProducto(productoVacio)
+      setModalProductoAbierto(false)
       await recargarDatos()
     } catch (error) {
       setPanelError(mensajeError(error))
@@ -936,224 +972,292 @@ export default function AdminPanel() {
             </div>
           </div>
         ) : pestaña === 'productos' ? (
-          <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(21rem,0.8fr)]">
+          <>
             <section className="rounded-2xl bg-white p-5 shadow-sm md:p-6">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-extrabold text-neutral-900">Productos</h2>
                   <p className="mt-1 text-sm text-neutral-500">
-                    {loading ? 'Cargando catálogo...' : `${productos.length} productos`}
+                    {loading
+                      ? 'Cargando catálogo...'
+                      : `${productosFiltrados.length} de ${productos.length} productos`}
                   </p>
                 </div>
-                <input
-                  value={busqueda}
-                  onChange={(event) => setBusqueda(event.target.value)}
-                  placeholder="Buscar producto"
-                  aria-label="Buscar producto"
-                  className="h-10 w-full max-w-xs rounded-lg border border-neutral-200 px-3 text-sm outline-none focus:border-neutral-400"
-                />
-              </div>
-
-              <div className="mt-5 divide-y divide-neutral-100">
-                {productosFiltrados.map((producto) => (
-                  <article key={producto.id} className="flex gap-3 py-4 first:pt-0 last:pb-0">
-                    <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-neutral-100">
-                      {producto.primary_image && (
-                        <img
-                          src={obtenerUrlImagen(producto.primary_image)}
-                          alt=""
-                          className="h-full w-full object-contain"
-                        />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="truncate text-sm font-bold text-neutral-900">{producto.name}</h3>
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            producto.isActive
-                              ? 'bg-green-50 text-green-700'
-                              : 'bg-neutral-100 text-neutral-500'
-                          }`}
-                        >
-                          {producto.isActive ? 'Activo' : 'Inactivo'}
-                        </span>
-                      </div>
-                      <p className="mt-1 truncate text-xs text-neutral-500">
-                        {producto.brand} · {producto.category}
-                      </p>
-                      <div className="mt-2 flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => comenzarEdicionProducto(producto)}
-                          className="text-xs font-semibold text-neutral-700 underline underline-offset-2"
-                        >
-                          Editar
-                        </button>
-                        {producto.isActive && (
-                          <button
-                            type="button"
-                            onClick={() => void archivarProducto(producto)}
-                            className="text-xs font-semibold text-red-600 underline underline-offset-2"
-                          >
-                            Desactivar
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </article>
-                ))}
-                {!loading && productosFiltrados.length === 0 && (
-                  <p className="py-10 text-center text-sm text-neutral-500">No hay productos para mostrar.</p>
-                )}
-              </div>
-            </section>
-
-            <section className="rounded-2xl bg-white p-5 shadow-sm md:p-6">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-extrabold text-neutral-900">
-                    {productoEnEdicion ? 'Editar producto' : 'Nuevo producto'}
-                  </h2>
-                  <p className="mt-1 text-sm text-neutral-500">Los cambios se guardan en el catálogo publicado.</p>
-                </div>
-                {productoEnEdicion && (
+                <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
+                  <input
+                    value={busqueda}
+                    onChange={(event) => setBusqueda(event.target.value)}
+                    placeholder="Buscar producto"
+                    aria-label="Buscar producto"
+                    className="h-10 w-full rounded-lg border border-neutral-200 px-3 text-sm outline-none focus:border-neutral-400 sm:w-64"
+                  />
                   <button
                     type="button"
-                    onClick={() => {
-                      setProductoEnEdicion(null)
-                      setFormularioProducto(productoVacio)
-                    }}
-                    className="text-xs font-semibold text-neutral-500 underline"
+                    onClick={abrirProductoNuevo}
+                    className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-[#FFD21E] px-4 text-sm font-bold text-neutral-900 transition hover:bg-[#f2c500]"
                   >
-                    Cancelar
+                    <Plus className="h-4 w-4" /> Agregar producto
                   </button>
-                )}
+                </div>
               </div>
 
-              <form onSubmit={guardarProducto} className="mt-5 grid gap-4 sm:grid-cols-2">
-                {campoFormulario('Nombre', formularioProducto.name, (name) => {
-                  setFormularioProducto((current) => ({
-                    ...current,
-                    name,
-                    slug: productoEnEdicion ? current.slug : crearSlug(name),
-                  }))
-                }, { required: true })}
-                {campoFormulario('Slug', formularioProducto.slug, (slug) =>
-                  setFormularioProducto((current) => ({ ...current, slug })), { required: true })}
-
-                <label className="grid gap-1.5 text-sm font-medium text-neutral-700">
-                  Categoría
-                  <select
-                    required
-                    value={formularioProducto.categoryId}
-                    onChange={(event) =>
-                      setFormularioProducto((current) => ({
-                        ...current,
-                        categoryId: event.target.value,
-                      }))
-                    }
-                    className="h-10 rounded-lg border border-neutral-200 bg-white px-3 text-sm font-normal outline-none focus:border-neutral-400"
-                  >
-                    <option value="">Selecciona categoría</option>
-                    {categorias.filter((category) => category.isActive).map((category) => (
-                      <option key={category.id} value={category.id}>{category.name}</option>
-                    ))}
-                  </select>
-                </label>
-                {campoFormulario('Subcategoría', formularioProducto.subcategory, (subcategory) =>
-                  setFormularioProducto((current) => ({ ...current, subcategory })), { required: true })}
-                {campoFormulario('Marca', formularioProducto.brand, (brand) =>
-                  setFormularioProducto((current) => ({ ...current, brand })), { required: true })}
-                {campoFormulario('Modelo', formularioProducto.model, (model) =>
-                  setFormularioProducto((current) => ({ ...current, model })), { required: true })}
-                {campoFormulario('Precio USD (vacío = consultar)', formularioProducto.priceUsd, (priceUsd) =>
-                  setFormularioProducto((current) => ({ ...current, priceUsd })), {
-                  type: 'number',
-                  min: '0',
-                })}
-                {campoFormulario('Rango destacado (vacío = no destacado)', formularioProducto.topRank, (topRank) =>
-                  setFormularioProducto((current) => ({ ...current, topRank })), {
-                  type: 'number',
-                  min: '1',
-                })}
-
-                <label className="grid gap-1.5 text-sm font-medium text-neutral-700 sm:col-span-2">
-                  Especificaciones
-                  <textarea
-                    required
-                    rows={3}
-                    value={formularioProducto.specifications}
-                    onChange={(event) =>
-                      setFormularioProducto((current) => ({
-                        ...current,
-                        specifications: event.target.value,
-                      }))
-                    }
-                    className="resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-normal outline-none focus:border-neutral-400"
-                  />
-                </label>
-
-                <div className="sm:col-span-2">
-                  <label className="grid gap-1.5 text-sm font-medium text-neutral-700">
-                    Imagen del producto
-                    <input
-                      type="file"
-                      accept="image/*"
-                      disabled={uploading}
-                      onChange={(event) => void subirImagen(event)}
-                      className="block w-full rounded-lg border border-neutral-200 bg-white text-sm file:mr-4 file:border-0 file:bg-neutral-100 file:px-4 file:py-2.5 file:font-semibold"
+              {loading ? (
+                <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
+                  {[0, 1, 2, 3].map((item) => (
+                    <div
+                      key={item}
+                      aria-hidden="true"
+                      className="h-64 animate-pulse rounded-2xl border border-neutral-100 bg-neutral-50"
                     />
-                  </label>
-                  <p className="mt-1 text-xs text-neutral-400">
-                    {uploading ? 'Subiendo imagen...' : 'Imágenes de hasta 10 MB. Se guardan en Supabase Storage.'}
-                  </p>
-                  {campoFormulario('URL de la imagen', formularioProducto.primaryImage, (primaryImage) =>
-                    setFormularioProducto((current) => ({ ...current, primaryImage })), { required: true })}
-                  {formularioProducto.primaryImage && (
-                    <img
-                      src={obtenerUrlImagen(formularioProducto.primaryImage)}
-                      alt="Vista previa del producto"
-                      className="mt-3 h-28 w-28 rounded-xl bg-neutral-50 object-contain"
-                    />
-                  )}
-                </div>
-
-                <div className="flex flex-wrap gap-x-4 gap-y-2 sm:col-span-2">
-                  {([
-                    ['onSale', 'En oferta'],
-                    ['warranty', 'Garantía'],
-                    ['transport', 'Transporte'],
-                    ['invoice', 'Factura'],
-                    ['isActive', 'Visible en catálogo'],
-                  ] as const).map(([key, label]) => (
-                    <label key={key} className="inline-flex items-center gap-2 text-xs font-medium text-neutral-600">
-                      <input
-                        type="checkbox"
-                        checked={formularioProducto[key]}
-                        onChange={(event) =>
-                          setFormularioProducto((current) => ({
-                            ...current,
-                            [key]: event.target.checked,
-                          }))
-                        }
-                        className="h-4 w-4 accent-neutral-900"
-                      />
-                      {label}
-                    </label>
                   ))}
                 </div>
-
-                <button
-                  type="submit"
-                  disabled={saving || uploading || categorias.every((category) => !category.isActive)}
-                  className="h-11 rounded-xl bg-[#FFD21E] px-4 text-sm font-bold text-neutral-900 transition hover:bg-[#f2c500] disabled:cursor-not-allowed disabled:opacity-60 sm:col-span-2"
-                >
-                  {saving ? 'Guardando...' : productoEnEdicion ? 'Guardar cambios' : 'Crear producto'}
-                </button>
-              </form>
+              ) : productosFiltrados.length === 0 ? (
+                <p className="py-16 text-center text-sm text-neutral-500">
+                  No hay productos para mostrar.
+                </p>
+              ) : (
+                <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
+                  {productosFiltrados.map((producto) => (
+                    <article
+                      key={producto.id}
+                      className="flex flex-col rounded-2xl border border-neutral-100 bg-white p-3 shadow-sm transition hover:shadow-md"
+                    >
+                      <div className="relative flex aspect-square items-center justify-center overflow-hidden rounded-xl bg-[#f5f6f8]">
+                        {producto.primary_image ? (
+                          <img
+                            src={obtenerUrlImagen(producto.primary_image, 480)}
+                            alt={producto.name}
+                            loading="lazy"
+                            className="h-full w-full object-contain"
+                          />
+                        ) : (
+                          <span className="px-2 text-center text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+                            {producto.brand || 'Sin foto'}
+                          </span>
+                        )}
+                        <span className="absolute left-2 top-2 flex flex-col items-start gap-1">
+                          {producto.top_ventas && (
+                            <span className="rounded-full bg-[#FFD21E] px-2 py-0.5 text-[9px] font-bold text-neutral-900 shadow-sm">
+                              MÁS VENDIDO
+                            </span>
+                          )}
+                          {producto.oferta && (
+                            <span className="rounded-full bg-neutral-900 px-2 py-0.5 text-[9px] font-bold text-white shadow-sm">
+                              EN REBAJA
+                            </span>
+                          )}
+                          {!producto.isActive && (
+                            <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-[9px] font-bold text-neutral-600 shadow-sm">
+                              INACTIVO
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex flex-1 flex-col px-1 pt-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-neutral-400">
+                          {producto.brand}
+                        </p>
+                        <p className="mt-0.5 line-clamp-2 text-left text-xs font-bold leading-snug text-neutral-900 sm:text-sm">
+                          {producto.name}
+                        </p>
+                        <p className="mt-1 hidden line-clamp-1 text-xs text-neutral-400 sm:block">
+                          {producto.specifications}
+                        </p>
+                        <p className="mt-auto pt-2 text-base font-extrabold tracking-tight text-neutral-900 sm:text-lg">
+                          {precioProducto(producto.price_usd)}
+                        </p>
+                        <div className="mt-2 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => comenzarEdicionProducto(producto)}
+                            className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-neutral-100 px-3 py-2.5 text-xs font-semibold text-neutral-900 shadow-sm transition hover:bg-neutral-200 sm:text-sm"
+                          >
+                            <Pencil className="h-4 w-4" /> Editar
+                          </button>
+                          {producto.isActive && (
+                            <button
+                              type="button"
+                              onClick={() => void archivarProducto(producto)}
+                              aria-label={`Desactivar ${producto.name}`}
+                              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-400 transition hover:border-red-200 hover:bg-red-50 hover:text-red-500"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
             </section>
-          </div>
+
+            {modalProductoAbierto && (
+              <div
+                className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6"
+                role="dialog"
+                aria-modal="true"
+                aria-label={productoEnEdicion ? 'Editar producto' : 'Nuevo producto'}
+              >
+                <div className="absolute inset-0 bg-black/40" onClick={cerrarModalProducto} />
+                <div className="relative flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl">
+                  <div className="flex items-start justify-between gap-3 border-b border-neutral-100 px-5 py-4 md:px-6">
+                    <div>
+                      <h2 className="text-lg font-extrabold text-neutral-900">
+                        {productoEnEdicion ? 'Editar producto' : 'Nuevo producto'}
+                      </h2>
+                      <p className="mt-0.5 text-sm text-neutral-500">
+                        {productoEnEdicion
+                          ? 'Actualiza los datos y guarda los cambios.'
+                          : 'Completa los datos para publicarlo en el catálogo.'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={cerrarModalProducto}
+                      aria-label="Cerrar"
+                      className="rounded-lg p-2 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+
+                  <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 md:px-6">
+                    <form onSubmit={guardarProducto} className="grid gap-4 sm:grid-cols-2">
+                      {campoFormulario('Nombre', formularioProducto.name, (name) => {
+                        setFormularioProducto((current) => ({
+                          ...current,
+                          name,
+                          slug: productoEnEdicion ? current.slug : crearSlug(name),
+                        }))
+                      }, { required: true })}
+                      {campoFormulario('Slug', formularioProducto.slug, (slug) =>
+                        setFormularioProducto((current) => ({ ...current, slug })), { required: true })}
+
+                      <label className="grid gap-1.5 text-sm font-medium text-neutral-700">
+                        Categoría
+                        <select
+                          required
+                          value={formularioProducto.categoryId}
+                          onChange={(event) =>
+                            setFormularioProducto((current) => ({
+                              ...current,
+                              categoryId: event.target.value,
+                            }))
+                          }
+                          className="h-10 rounded-lg border border-neutral-200 bg-white px-3 text-sm font-normal outline-none focus:border-neutral-400"
+                        >
+                          <option value="">Selecciona categoría</option>
+                          {categorias.filter((category) => category.isActive).map((category) => (
+                            <option key={category.id} value={category.id}>{category.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                      {campoFormulario('Subcategoría', formularioProducto.subcategory, (subcategory) =>
+                        setFormularioProducto((current) => ({ ...current, subcategory })), { required: true })}
+                      {campoFormulario('Marca', formularioProducto.brand, (brand) =>
+                        setFormularioProducto((current) => ({ ...current, brand })), { required: true })}
+                      {campoFormulario('Modelo', formularioProducto.model, (model) =>
+                        setFormularioProducto((current) => ({ ...current, model })), { required: true })}
+                      {campoFormulario('Precio USD (vacío = consultar)', formularioProducto.priceUsd, (priceUsd) =>
+                        setFormularioProducto((current) => ({ ...current, priceUsd })), {
+                        type: 'number',
+                        min: '0',
+                      })}
+                      {campoFormulario('Rango destacado (vacío = no destacado)', formularioProducto.topRank, (topRank) =>
+                        setFormularioProducto((current) => ({ ...current, topRank })), {
+                        type: 'number',
+                        min: '1',
+                      })}
+
+                      <label className="grid gap-1.5 text-sm font-medium text-neutral-700 sm:col-span-2">
+                        Especificaciones
+                        <textarea
+                          required
+                          rows={3}
+                          value={formularioProducto.specifications}
+                          onChange={(event) =>
+                            setFormularioProducto((current) => ({
+                              ...current,
+                              specifications: event.target.value,
+                            }))
+                          }
+                          className="resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-normal outline-none focus:border-neutral-400"
+                        />
+                      </label>
+
+                      <div className="sm:col-span-2">
+                        <label className="grid gap-1.5 text-sm font-medium text-neutral-700">
+                          Imagen del producto
+                          <input
+                            type="file"
+                            accept="image/*"
+                            disabled={uploading}
+                            onChange={(event) => void subirImagen(event)}
+                            className="block w-full rounded-lg border border-neutral-200 bg-white text-sm file:mr-4 file:border-0 file:bg-neutral-100 file:px-4 file:py-2.5 file:font-semibold"
+                          />
+                        </label>
+                        <p className="mt-1 text-xs text-neutral-400">
+                          {uploading ? 'Subiendo imagen...' : 'Imágenes de hasta 10 MB. Se guardan en Supabase Storage.'}
+                        </p>
+                        {campoFormulario('URL de la imagen', formularioProducto.primaryImage, (primaryImage) =>
+                          setFormularioProducto((current) => ({ ...current, primaryImage })), { required: true })}
+                        {formularioProducto.primaryImage && (
+                          <img
+                            src={obtenerUrlImagen(formularioProducto.primaryImage)}
+                            alt="Vista previa del producto"
+                            className="mt-3 h-28 w-28 rounded-xl bg-neutral-50 object-contain"
+                          />
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap gap-x-4 gap-y-2 sm:col-span-2">
+                        {([
+                          ['onSale', 'En oferta'],
+                          ['warranty', 'Garantía'],
+                          ['transport', 'Transporte'],
+                          ['invoice', 'Factura'],
+                          ['isActive', 'Visible en catálogo'],
+                        ] as const).map(([key, label]) => (
+                          <label key={key} className="inline-flex items-center gap-2 text-xs font-medium text-neutral-600">
+                            <input
+                              type="checkbox"
+                              checked={formularioProducto[key]}
+                              onChange={(event) =>
+                                setFormularioProducto((current) => ({
+                                  ...current,
+                                  [key]: event.target.checked,
+                                }))
+                              }
+                              className="h-4 w-4 accent-neutral-900"
+                            />
+                            {label}
+                          </label>
+                        ))}
+                      </div>
+
+                      <div className="flex flex-col gap-3 sm:col-span-2 sm:flex-row">
+                        <button
+                          type="submit"
+                          disabled={saving || uploading || categorias.every((category) => !category.isActive)}
+                          className="h-11 flex-1 rounded-xl bg-[#FFD21E] px-4 text-sm font-bold text-neutral-900 transition hover:bg-[#f2c500] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {saving ? 'Guardando...' : productoEnEdicion ? 'Guardar cambios' : 'Crear producto'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cerrarModalProducto}
+                          className="h-11 rounded-xl border border-neutral-200 px-4 text-sm font-semibold text-neutral-600 transition hover:bg-neutral-50"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.65fr)]">
             <section className="rounded-2xl bg-white p-5 shadow-sm md:p-6">
