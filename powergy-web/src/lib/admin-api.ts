@@ -27,7 +27,7 @@ export interface ProductoAdmin {
   isActive: boolean
 }
 
-interface Pagina<T> {
+export interface Pagina<T> {
   items: T[]
   page: number
   pageSize: number
@@ -167,30 +167,37 @@ export async function obtenerCategoriasAdmin(token: string): Promise<CategoriaAd
   return resultado
 }
 
-export async function obtenerProductosAdmin(token: string): Promise<ProductoAdmin[]> {
-  const productos: ProductoAdmin[] = []
-  let pagina = 1
-  let totalPaginas = 1
+export interface OpcionesProductosAdmin {
+  page?: number
+  pageSize?: number
+  q?: string
+}
 
-  do {
-    const resultado = await solicitarApi<Pagina<ProductoAdmin>>(
-      `/api/products/admin?page=${pagina}&pageSize=100&includeInactive=true`,
-      token,
-    )
-    if (
-      !resultado ||
-      !Array.isArray(resultado.items) ||
-      !Number.isInteger(resultado.totalPages) ||
-      resultado.totalPages < 0
-    ) {
-      throw new Error('La API devolvió una respuesta de productos inválida.')
-    }
-    productos.push(...resultado.items)
-    totalPaginas = resultado.totalPages
-    pagina += 1
-  } while (pagina <= totalPaginas)
+export async function obtenerProductosAdmin(
+  token: string,
+  { page = 1, pageSize = 24, q }: OpcionesProductosAdmin = {},
+): Promise<Pagina<ProductoAdmin>> {
+  const parametros = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+    includeInactive: 'true',
+  })
+  const termino = q?.trim()
+  if (termino) parametros.set('q', termino)
 
-  return productos
+  const resultado = await solicitarApi<Pagina<ProductoAdmin>>(
+    `/api/products/admin?${parametros.toString()}`,
+    token,
+  )
+  if (
+    !resultado ||
+    !Array.isArray(resultado.items) ||
+    !Number.isInteger(resultado.totalPages) ||
+    resultado.totalPages < 0
+  ) {
+    throw new Error('La API devolvió una respuesta de productos inválida.')
+  }
+  return resultado
 }
 
 export function crearProducto(token: string, payload: object): Promise<ProductoAdmin | null> {

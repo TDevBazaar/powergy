@@ -3,13 +3,12 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useState,
   type FormEvent,
   type ChangeEvent,
 } from 'react'
 import Link from 'next/link'
-import { Pencil, Plus, Trash2, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2, X } from 'lucide-react'
 import type { Session, SupabaseClient } from '@supabase/supabase-js'
 import {
   actualizarProducto,
@@ -182,6 +181,11 @@ export default function AdminPanel() {
   const [password, setPassword] = useState('')
   const [pestaña, setPestaña] = useState<Pestaña>('productos')
   const [productos, setProductos] = useState<ProductoAdmin[]>([])
+  const [totalProductos, setTotalProductos] = useState(0)
+  const [totalPaginasProductos, setTotalPaginasProductos] = useState(1)
+  const [paginaProductos, setPaginaProductos] = useState(1)
+  const [tamanoPagina, setTamanoPagina] = useState(24)
+  const [busquedaAplicada, setBusquedaAplicada] = useState('')
   const [categorias, setCategorias] = useState<CategoriaAdmin[]>([])
   const [productoEnEdicion, setProductoEnEdicion] = useState<string | null>(null)
   const [modalProductoAbierto, setModalProductoAbierto] = useState(false)
@@ -247,33 +251,62 @@ export default function AdminPanel() {
     if (!session) {
       setProductos([])
       setCategorias([])
+      setTotalProductos(0)
+      setTotalPaginasProductos(1)
       return
     }
 
     let activo = true
-    setLoading(true)
     setPanelError('')
 
-    Promise.all([
-      obtenerProductosAdmin(session.access_token),
-      obtenerCategoriasAdmin(session.access_token),
-    ])
-      .then(([productosAdmin, categoriasAdmin]) => {
-        if (!activo) return
-        setProductos(productosAdmin)
-        setCategorias(categoriasAdmin)
+    obtenerCategoriasAdmin(session.access_token)
+      .then((categoriasAdmin) => {
+        if (activo) setCategorias(categoriasAdmin)
       })
       .catch((error: unknown) => {
         if (activo) setPanelError(mensajeError(error))
-      })
-      .finally(() => {
-        if (activo) setLoading(false)
       })
 
     return () => {
       activo = false
     }
   }, [session])
+
+  const cargarProductos = useCallback(
+    async (pagina: number, pageSize: number, q: string) => {
+      if (!session) return
+      setLoading(true)
+      setPanelError('')
+      try {
+        const resultado = await obtenerProductosAdmin(session.access_token, {
+          page: pagina,
+          pageSize,
+          q,
+        })
+        setProductos(resultado.items)
+        setTotalProductos(resultado.totalItems)
+        setTotalPaginasProductos(Math.max(1, resultado.totalPages))
+      } catch (error) {
+        setPanelError(mensajeError(error))
+      } finally {
+        setLoading(false)
+      }
+    },
+    [session],
+  )
+
+  useEffect(() => {
+    if (!session) return
+    void cargarProductos(paginaProductos, tamanoPagina, busquedaAplicada)
+  }, [session, paginaProductos, tamanoPagina, busquedaAplicada, cargarProductos])
+
+  useEffect(() => {
+    const temporizador = setTimeout(() => {
+      setBusquedaAplicada(busqueda.trim())
+      setPaginaProductos(1)
+    }, 350)
+    return () => clearTimeout(temporizador)
+  }, [busqueda])
 
   const cargarSolicitudes = useCallback(
     async (pagina: number) => {
@@ -334,16 +367,9 @@ export default function AdminPanel() {
     }
   }, [session])
 
-  const productosFiltrados = useMemo(() => {
-    const termino = busqueda.trim().toLocaleLowerCase()
-    if (!termino) return productos
-    return productos.filter((producto) =>
-      [producto.name, producto.brand, producto.model, producto.slug]
-        .join(' ')
-        .toLocaleLowerCase()
-        .includes(termino),
-    )
-  }, [busqueda, productos])
+  const productosDesde =
+    totalProductos === 0 ? 0 : (paginaProductos - 1) * tamanoPagina + 1
+  const productosHasta = Math.min(paginaProductos * tamanoPagina, totalProductos)
 
   useEffect(() => {
     if (!modalProductoAbierto) return
@@ -387,11 +413,17 @@ export default function AdminPanel() {
     setLoading(true)
     setPanelError('')
     try {
-      const [productosAdmin, categoriasAdmin] = await Promise.all([
-        obtenerProductosAdmin(session.access_token),
+      const [paginaApi, categoriasAdmin] = await Promise.all([
+        obtenerProductosAdmin(session.access_token, {
+          page: paginaProductos,
+          pageSize: tamanoPagina,
+          q: busquedaAplicada,
+        }),
         obtenerCategoriasAdmin(session.access_token),
       ])
-      setProductos(productosAdmin)
+      setProductos(paginaApi.items)
+      setTotalProductos(paginaApi.totalItems)
+      setTotalPaginasProductos(Math.max(1, paginaApi.totalPages))
       setCategorias(categoriasAdmin)
     } catch (error) {
       setPanelError(mensajeError(error))
@@ -575,7 +607,11 @@ export default function AdminPanel() {
     try {
       await desactivarProducto(session.access_token, producto.id)
       setNotice('Producto desactivado.')
-      await recargarDatos()
+      if (productos.length === 1 && paginaProductos > 1) {
+        setPaginaProductos(paginaProductos - 1)
+      } else {
+        await recargarDatos()
+      }
     } catch (error) {
       setPanelError(mensajeError(error))
     }
@@ -980,7 +1016,9 @@ export default function AdminPanel() {
                   <p className="mt-1 text-sm text-neutral-500">
                     {loading
                       ? 'Cargando catálogo...'
-                      : `${productosFiltrados.length} de ${productos.length} productos`}
+                      : `${totalProductos} ${
+                          totalProductos === 1 ? 'producto' : 'productos'
+                        }`}
                   </p>
                 </div>
                 <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
@@ -1011,13 +1049,15 @@ export default function AdminPanel() {
                     />
                   ))}
                 </div>
-              ) : productosFiltrados.length === 0 ? (
+              ) : productos.length === 0 ? (
                 <p className="py-16 text-center text-sm text-neutral-500">
-                  No hay productos para mostrar.
+                  {busquedaAplicada
+                    ? `Sin resultados para “${busquedaAplicada}”.`
+                    : 'No hay productos para mostrar.'}
                 </p>
               ) : (
                 <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
-                  {productosFiltrados.map((producto) => (
+                  {productos.map((producto) => (
                     <article
                       key={producto.id}
                       className="flex flex-col rounded-2xl border border-neutral-100 bg-white p-3 shadow-sm transition hover:shadow-md"
@@ -1088,6 +1128,61 @@ export default function AdminPanel() {
                       </div>
                     </article>
                   ))}
+                </div>
+              )}
+
+              {!loading && totalProductos > 0 && (
+                <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-100 pt-4">
+                  <p className="text-xs text-neutral-500">
+                    Mostrando {productosDesde}–{productosHasta} de {totalProductos}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <label className="flex items-center gap-2 text-xs font-medium text-neutral-500">
+                      Mostrar
+                      <select
+                        value={tamanoPagina}
+                        onChange={(event) => {
+                          setTamanoPagina(Number(event.target.value))
+                          setPaginaProductos(1)
+                        }}
+                        className="h-9 rounded-lg border border-neutral-200 bg-white px-2 text-sm text-neutral-700 outline-none focus:border-neutral-400"
+                      >
+                        {[12, 24, 48, 100].map((opcion) => (
+                          <option key={opcion} value={opcion}>
+                            {opcion}
+                          </option>
+                        ))}
+                      </select>
+                      por página
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPaginaProductos((actual) => Math.max(1, actual - 1))}
+                        disabled={paginaProductos <= 1}
+                        aria-label="Página anterior"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-neutral-200 text-neutral-600 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <span className="text-xs font-semibold text-neutral-600">
+                        {paginaProductos} / {totalPaginasProductos}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPaginaProductos((actual) =>
+                            Math.min(totalPaginasProductos, actual + 1),
+                          )
+                        }
+                        disabled={paginaProductos >= totalPaginasProductos}
+                        aria-label="Página siguiente"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-neutral-200 text-neutral-600 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </section>
