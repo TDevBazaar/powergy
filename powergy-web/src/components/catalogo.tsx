@@ -271,14 +271,10 @@ export default function Catalogo() {
     fingerprint: string,
     construirMensaje: (order: SolicitudCreada) => string,
   ) {
+    // Intentamos abrir WhatsApp en una pestaña nueva; si el navegador bloquea
+    // las ventanas emergentes, continuamos en la pestaña actual.
     const ventanaWhatsApp = window.open('about:blank', '_blank')
-    if (!ventanaWhatsApp) {
-      setToast('Permite las ventanas emergentes para continuar a WhatsApp.')
-      return
-    }
-    ventanaWhatsApp.opener = null
-    registrandoPedidoRef.current = true
-    setRegistrandoPedido(true)
+    if (ventanaWhatsApp) ventanaWhatsApp.opener = null
 
     const pending = claveSolicitudPendiente.current
     const idempotencyKey = pending?.fingerprint === fingerprint
@@ -286,12 +282,20 @@ export default function Catalogo() {
       : crypto.randomUUID()
     claveSolicitudPendiente.current = { fingerprint, key: idempotencyKey }
 
+    registrandoPedidoRef.current = true
+    setRegistrandoPedido(true)
+
     try {
       const order = await registrarSolicitudPedido(items, idempotencyKey)
-      ventanaWhatsApp.location.href = linkWhatsApp(construirMensaje(order))
+      const enlace = linkWhatsApp(construirMensaje(order))
+      if (ventanaWhatsApp) {
+        ventanaWhatsApp.location.href = enlace
+      } else {
+        window.location.href = enlace
+      }
       claveSolicitudPendiente.current = null
     } catch (error) {
-      ventanaWhatsApp.close()
+      ventanaWhatsApp?.close()
       setToast(
         error instanceof Error
           ? `No se pudo registrar la solicitud: ${error.message}`
