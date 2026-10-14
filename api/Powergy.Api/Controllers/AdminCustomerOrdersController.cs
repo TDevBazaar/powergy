@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Powergy.Api.Contracts;
+using Powergy.Api.Data;
 using Powergy.Api.Services;
 
 namespace Powergy.Api.Controllers;
@@ -11,7 +13,9 @@ namespace Powergy.Api.Controllers;
 [Route("api/admin/orders")]
 [Authorize(Policy = "AdminOnly")]
 [Produces("application/json")]
-public sealed class AdminCustomerOrdersController(ICustomerOrderService orders) : ControllerBase
+public sealed class AdminCustomerOrdersController(
+    ICustomerOrderService orders,
+    PowergyDbContext db) : ControllerBase
 {
     /// <summary>Returns a filtered page of order requests.</summary>
     [HttpGet]
@@ -54,11 +58,24 @@ public sealed class AdminCustomerOrdersController(ICustomerOrderService orders) 
         Guid id,
         CancellationToken cancellationToken)
     {
-        if (!Guid.TryParse(User.FindFirstValue("sub"), out var adminUserId))
+        if (!Guid.TryParse(User.FindFirstValue("sub"), out var supabaseUserId))
         {
             return Unauthorized();
         }
 
-        return Ok(await orders.CloseAsync(id, adminUserId, cancellationToken));
+        // El token identifica al administrador por su usuario de Supabase, pero
+        // closed_by_admin_user_id referencia admin_users.id, así que resolvemos
+        // la clave interna antes de cerrar la solicitud.
+        var adminUserId = await db.AdminUsers
+            .Where(admin => admin.SupabaseUserId == supabaseUserId && admin.IsActive)
+            .Select(admin => (Guid?)admin.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (adminUserId is null)
+        {
+            return Unauthorized();
+        }
+
+        return Ok(await orders.CloseAsync(id, adminUserId.Value, cancellationToken));
     }
 }
