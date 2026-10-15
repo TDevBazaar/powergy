@@ -19,6 +19,7 @@ public interface ICustomerOrderService
     Task<CustomerOrderResponse> CloseAsync(
         Guid id,
         Guid adminUserId,
+        CloseCustomerOrderRequest request,
         CancellationToken cancellationToken);
 
     Task<CustomerOrderMetricsResponse> GetMetricsAsync(

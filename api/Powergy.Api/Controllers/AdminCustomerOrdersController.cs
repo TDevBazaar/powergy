@@ -49,13 +49,14 @@ public sealed class AdminCustomerOrdersController(
         return order is null ? NotFound() : Ok(order);
     }
 
-    /// <summary>Closes a request and records the authenticated administrator and timestamp.</summary>
+    /// <summary>Finaliza una solicitud (vendida o cancelada) y registra al administrador.</summary>
     [HttpPost("{id:guid}/close")]
     [ProducesResponseType(typeof(CustomerOrderResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<CustomerOrderResponse>> CloseOrder(
         Guid id,
+        [FromBody] CloseCustomerOrderRequest? request,
         CancellationToken cancellationToken)
     {
         if (!Guid.TryParse(User.FindFirstValue("sub"), out var supabaseUserId))
@@ -76,6 +77,10 @@ public sealed class AdminCustomerOrdersController(
             return Unauthorized();
         }
 
-        return Ok(await orders.CloseAsync(id, adminUserId.Value, cancellationToken));
+        return Ok(await orders.CloseAsync(
+            id,
+            adminUserId.Value,
+            request ?? new CloseCustomerOrderRequest(),
+            cancellationToken));
     }
 }

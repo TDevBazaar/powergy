@@ -55,7 +55,7 @@ export interface HistorialSolicitud {
 export interface SolicitudPedido {
   id: string
   reference: string
-  status: 'requested' | 'closed'
+  status: 'requested' | 'closed' | 'cancelled'
   estimatedTotalUsd: number | null
   createdAt: string
   closedAt: string | null
@@ -69,9 +69,11 @@ export interface MetricasSolicitudes {
   to: string
   requests: number
   closedRequests: number
+  cancelledRequests: number
   openRequests: number
   estimatedValueUsd: number | null
   closedEstimatedValueUsd: number | null
+  cancelledEstimatedValueUsd: number | null
   closeRate: number | null
   closedDuringPeriod: number
 }
@@ -283,13 +285,21 @@ export function obtenerSolicitudAdmin(
   )
 }
 
+export type ResultadoCierre = 'closed' | 'cancelled'
+
+export interface CierreSolicitudPayload {
+  outcome: ResultadoCierre
+  items?: Array<{ productId: string; quantity: number }>
+}
+
 export function cerrarSolicitudAdmin(
   token: string,
   id: string,
+  payload: CierreSolicitudPayload,
 ): Promise<SolicitudPedido> {
   return solicitarApiAdmin<SolicitudPedido>(
     `/api/admin/orders/${encodeURIComponent(id)}/close`,
     token,
-    { method: 'POST' },
+    { method: 'POST', body: JSON.stringify(payload) },
   )
 }

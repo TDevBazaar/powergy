@@ -21,6 +21,21 @@ public sealed record CustomerOrderLineRequest
     public int Quantity { get; init; }
 }
 
+public sealed record CloseCustomerOrderRequest
+{
+    /// <summary>Resultado de la solicitud: "closed" (vendida) o "cancelled".</summary>
+    [Required, RegularExpression("^(closed|cancelled)$")]
+    public string Outcome { get; init; } = CustomerOrderStatuses.Closed;
+
+    /// <summary>
+    /// Líneas finales a conservar (productId y cantidad). Si es <c>null</c> se
+    /// mantienen todas las líneas actuales. Solo se permite quitar productos o
+    /// ajustar cantidades de los ya solicitados, nunca agregar nuevos.
+    /// </summary>
+    [MaxLength(20)]
+    public IReadOnlyList<CustomerOrderLineRequest>? Items { get; init; }
+}
+
 public sealed record CustomerOrderQueryRequest
 {
     public string? Status { get; init; }
@@ -82,9 +97,11 @@ public sealed record CustomerOrderMetricsResponse(
     DateTimeOffset To,
     int Requests,
     int ClosedRequests,
+    int CancelledRequests,
     int OpenRequests,
     decimal? EstimatedValueUsd,
     decimal? ClosedEstimatedValueUsd,
+    decimal? CancelledEstimatedValueUsd,
     decimal? CloseRate,
     int ClosedDuringPeriod);
 

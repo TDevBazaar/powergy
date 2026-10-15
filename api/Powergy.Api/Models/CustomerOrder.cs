@@ -19,4 +19,5 @@ public static class CustomerOrderStatuses
 {
     public const string Requested = "requested";
     public const string Closed = "closed";
+    public const string Cancelled = "cancelled";
 }

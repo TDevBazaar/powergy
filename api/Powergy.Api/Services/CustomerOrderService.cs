@@ -128,7 +128,9 @@ public sealed class CustomerOrderService(PowergyDbContext db) : ICustomerOrderSe
         ValidateDateRange(request.From, request.To);
         var status = request.Status?.Trim().ToLowerInvariant();
         if (status is not null
-            && status is not CustomerOrderStatuses.Requested and not CustomerOrderStatuses.Closed)
+            && status is not CustomerOrderStatuses.Requested
+                and not CustomerOrderStatuses.Closed
+                and not CustomerOrderStatuses.Cancelled)
         {
             throw new ApiValidationException("El estado del pedido no es válido.");
         }
@@ -184,26 +186,41 @@ public sealed class CustomerOrderService(PowergyDbContext db) : ICustomerOrderSe
     public async Task<CustomerOrderResponse> CloseAsync(
         Guid id,
         Guid adminUserId,
+        CloseCustomerOrderRequest request,
         CancellationToken cancellationToken)
     {
+        var outcome = request.Outcome?.Trim().ToLowerInvariant();
+        if (outcome is not CustomerOrderStatuses.Closed and not CustomerOrderStatuses.Cancelled)
+        {
+            throw new ApiValidationException("El resultado de la solicitud no es válido.");
+        }
+
         var order = await db.CustomerOrders
             .Include(item => item.Lines)
             .Include(item => item.StatusHistory)
             .FirstOrDefaultAsync(item => item.Id == id, cancellationToken)
             ?? throw new ApiNotFoundException("No se encontró la solicitud.");
 
-        if (order.Status == CustomerOrderStatuses.Closed)
+        if (order.Status is CustomerOrderStatuses.Closed or CustomerOrderStatuses.Cancelled)
         {
             return CustomerOrderMappings.ToResponse(order);
         }
 
         if (order.Status != CustomerOrderStatuses.Requested)
         {
-            throw new ApiConflictException("La solicitud no se puede cerrar desde su estado actual.");
+            throw new ApiConflictException("La solicitud no se puede finalizar desde su estado actual.");
+        }
+
+        if (request.Items is not null)
+        {
+            ApplyFinalLines(order, request.Items);
         }
 
         var now = DateTime.UtcNow;
-        order.Status = CustomerOrderStatuses.Closed;
+        order.Status = outcome;
+
+        // closed_at/closed_by_admin_user_id representan la finalización de la
+        // solicitud, tanto si se cerró (vendida) como si se canceló.
         order.ClosedAt = now;
         order.ClosedByAdminUserId = adminUserId;
 
@@ -215,7 +232,7 @@ public sealed class CustomerOrderService(PowergyDbContext db) : ICustomerOrderSe
             Id = Guid.NewGuid(),
             OrderId = order.Id,
             PreviousStatus = CustomerOrderStatuses.Requested,
-            Status = CustomerOrderStatuses.Closed,
+            Status = outcome,
             ChangedByAdminUserId = adminUserId,
             ChangedAt = now
         });
@@ -223,6 +240,62 @@ public sealed class CustomerOrderService(PowergyDbContext db) : ICustomerOrderSe
         await db.SaveChangesAsync(cancellationToken);
 
         return CustomerOrderMappings.ToResponse(order);
+    }
+
+    /// <summary>
+    /// Reemplaza las líneas de la solicitud por el conjunto final indicado:
+    /// quita los productos ausentes, ajusta cantidades y recalcula el total.
+    /// </summary>
+    private void ApplyFinalLines(CustomerOrder order, IReadOnlyList<CustomerOrderLineRequest> items)
+    {
+        var finales = items
+            .Where(item => !string.IsNullOrWhiteSpace(item.ProductId))
+            .GroupBy(item => item.ProductId.Trim(), StringComparer.Ordinal)
+            .Select(group => new
+            {
+                ProductId = group.Key,
+                Quantity = group.Sum(item => item.Quantity)
+            })
+            .ToArray();
+
+        if (finales.Length is 0 or > MaxDistinctItems
+            || finales.Any(item => item.Quantity is < 1 or > MaxQuantityPerProduct))
+        {
+            throw new ApiValidationException("Las cantidades de la solicitud no son válidas.");
+        }
+
+        var existentes = order.Lines
+            .Select(line => line.ProductId)
+            .ToHashSet(StringComparer.Ordinal);
+        if (finales.Any(item => !existentes.Contains(item.ProductId)))
+        {
+            throw new ApiValidationException(
+                "Solo se pueden quitar o ajustar productos ya presentes en la solicitud.");
+        }
+
+        var cantidades = finales.ToDictionary(
+            item => item.ProductId,
+            item => item.Quantity,
+            StringComparer.Ordinal);
+        foreach (var line in order.Lines.ToList())
+        {
+            if (cantidades.TryGetValue(line.ProductId, out var quantity))
+            {
+                line.Quantity = quantity;
+            }
+            else
+            {
+                order.Lines.Remove(line);
+                db.CustomerOrderLines.Remove(line);
+            }
+        }
+
+        var conservadas = order.Lines
+            .Where(line => cantidades.ContainsKey(line.ProductId))
+            .ToArray();
+        order.EstimatedTotalUsd = conservadas.All(line => line.UnitPriceUsd.HasValue)
+            ? conservadas.Sum(line => line.UnitPriceUsd!.Value * line.Quantity)
+            : null;
     }
 
     public async Task<CustomerOrderMetricsResponse> GetMetricsAsync(
@@ -250,28 +323,37 @@ public sealed class CustomerOrderService(PowergyDbContext db) : ICustomerOrderSe
                 Requests = group.Count(),
                 ClosedRequests = group.Sum(order =>
                     order.Status == CustomerOrderStatuses.Closed ? 1 : 0),
+                CancelledRequests = group.Sum(order =>
+                    order.Status == CustomerOrderStatuses.Cancelled ? 1 : 0),
                 EstimatedValueUsd = group.Sum(order => order.EstimatedTotalUsd),
                 ClosedEstimatedValueUsd = group
                     .Where(order => order.Status == CustomerOrderStatuses.Closed)
+                    .Sum(order => order.EstimatedTotalUsd),
+                CancelledEstimatedValueUsd = group
+                    .Where(order => order.Status == CustomerOrderStatuses.Cancelled)
                     .Sum(order => order.EstimatedTotalUsd)
             })
             .FirstOrDefaultAsync(cancellationToken);
 
         var closedDuringPeriod = await db.CustomerOrders
-            .CountAsync(order => order.ClosedAt >= fromUtc
+            .CountAsync(order => order.Status == CustomerOrderStatuses.Closed
+                && order.ClosedAt >= fromUtc
                 && order.ClosedAt < toUtc,
                 cancellationToken);
         var requests = totals?.Requests ?? 0;
         var closedRequests = totals?.ClosedRequests ?? 0;
+        var cancelledRequests = totals?.CancelledRequests ?? 0;
 
         return new CustomerOrderMetricsResponse(
             from,
             to,
             requests,
             closedRequests,
-            requests - closedRequests,
+            cancelledRequests,
+            requests - closedRequests - cancelledRequests,
             totals?.EstimatedValueUsd,
             totals?.ClosedEstimatedValueUsd,
+            totals?.CancelledEstimatedValueUsd,
             requests == 0 ? null : (decimal)closedRequests / requests,
             closedDuringPeriod);
     }
