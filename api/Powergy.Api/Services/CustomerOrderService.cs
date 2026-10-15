@@ -206,14 +206,20 @@ public sealed class CustomerOrderService(PowergyDbContext db) : ICustomerOrderSe
         order.Status = CustomerOrderStatuses.Closed;
         order.ClosedAt = now;
         order.ClosedByAdminUserId = adminUserId;
-        order.StatusHistory.Add(new CustomerOrderStatusHistory
+
+        // Se agrega explícitamente al DbSet: al añadir una entidad con clave ya
+        // asignada a la colección de una entidad rastreada, EF la marca como
+        // Modified y generaría un UPDATE (0 filas) en lugar de un INSERT.
+        db.CustomerOrderStatusHistory.Add(new CustomerOrderStatusHistory
         {
             Id = Guid.NewGuid(),
+            OrderId = order.Id,
             PreviousStatus = CustomerOrderStatuses.Requested,
             Status = CustomerOrderStatuses.Closed,
             ChangedByAdminUserId = adminUserId,
             ChangedAt = now
         });
+
         await db.SaveChangesAsync(cancellationToken);
 
         return CustomerOrderMappings.ToResponse(order);
