@@ -59,6 +59,27 @@ npm run build
 npm start
 ```
 
+## CI/CD con Vercel
+
+El workflow **Nova Moda CI** ejecuta `npm ci`, ESLint, la comprobación de
+TypeScript y el build de producción cuando hay cambios en `nova-moda/`, tanto
+en pushes como en pull requests.
+Vercel despliega automáticamente los cambios del repositorio conectado:
+previews para ramas y pull requests, y producción al actualizar `main`.
+
+Para conectar el proyecto:
+
+1. Importa `TDevBazaar/powergy` en Vercel o abre el proyecto ya creado.
+2. En **Settings → Build and Deployment**, define **Root Directory** como
+   `nova-moda` y confirma el framework **Next.js**.
+3. En **Settings → Environment Variables**, configura las variables de
+   `.env.example` para Production, Preview y Development según corresponda.
+4. En **Settings → Git**, usa `main` como Production Branch.
+
+La integración Git de Vercel administra los deployments sin guardar tokens de
+Vercel en GitHub Actions. Un push a otra rama genera un Preview; un push o
+merge a `main` genera Production.
+
 ## Cómo habla con el API
 
 - **Un único proxy** en `src/app/api/powergy/[...path]/route.ts` reenvía todas
