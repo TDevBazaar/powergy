@@ -16,13 +16,17 @@ import {
   crearProducto,
   desactivarCategoria,
   desactivarProducto,
+  etiquetaMotivoCancelacion,
   guardarCategoria,
+  MOTIVOS_CANCELACION,
+  obtenerAuditoriaAdmin,
   obtenerCategoriasAdmin,
   obtenerMetricasSolicitudes,
   obtenerProductosAdmin,
   obtenerSolicitudAdmin,
   obtenerSolicitudesAdmin,
   type CategoriaAdmin,
+  type EntradaAuditoria,
   type ItemSolicitud,
   type MetricasSolicitudes,
   type PaginaSolicitudes,
@@ -128,10 +132,21 @@ function claseEstado(estado: SolicitudPedido['status']): string {
   return 'bg-amber-50 text-amber-700'
 }
 
+function etiquetaTotal(estado: SolicitudPedido['status']): string {
+  if (estado === 'closed') return 'Total vendido'
+  if (estado === 'cancelled') return 'Total solicitado'
+  return 'Total estimado'
+}
+
 function totalItemsSolicitud(items: ItemSolicitud[]): number | null {
   if (items.length === 0) return null
   if (items.some((item) => item.unitPriceUsd === null)) return null
   return items.reduce((total, item) => total + (item.unitPriceUsd ?? 0) * item.quantity, 0)
+}
+
+/** Un producto sin precio o con precio cero se considera "por confirmar". */
+function itemSinPrecio(item: ItemSolicitud): boolean {
+  return item.unitPriceUsd === null || item.unitPriceUsd <= 0
 }
 
 function inicioDeDia(fecha: string): string | undefined {
@@ -223,6 +238,10 @@ export default function AdminPanel() {
   const [paginaSolicitudes, setPaginaSolicitudes] = useState(1)
   const [cargandoSolicitudes, setCargandoSolicitudes] = useState(false)
   const [cerrandoSolicitud, setCerrandoSolicitud] = useState(false)
+  const [motivoCancelacion, setMotivoCancelacion] = useState<string>('price')
+  const [notaCancelacion, setNotaCancelacion] = useState('')
+  const [confirmarSinPrecio, setConfirmarSinPrecio] = useState(false)
+  const [auditoriaProducto, setAuditoriaProducto] = useState<EntradaAuditoria | null>(null)
 
   useEffect(() => {
     setItemsEdicion(
@@ -230,6 +249,9 @@ export default function AdminPanel() {
         ? solicitudSeleccionada.items.map((item) => ({ ...item }))
         : [],
     )
+    setMotivoCancelacion('price')
+    setNotaCancelacion('')
+    setConfirmarSinPrecio(false)
   }, [solicitudSeleccionada])
 
   useEffect(() => {
@@ -495,6 +517,24 @@ export default function AdminPanel() {
     )
   }
 
+  function ajustarPrecioItem(productId: string, valor: string) {
+    setItemsEdicion((items) =>
+      items.map((item) => {
+        if (item.productId !== productId) return item
+        if (valor.trim() === '') {
+          return { ...item, unitPriceUsd: null, lineTotalUsd: null }
+        }
+        const precio = Number(valor)
+        if (Number.isNaN(precio) || precio < 0) return item
+        return {
+          ...item,
+          unitPriceUsd: precio,
+          lineTotalUsd: precio * item.quantity,
+        }
+      }),
+    )
+  }
+
   async function finalizarSolicitud(
     solicitud: SolicitudPedido,
     outcome: 'closed' | 'cancelled',
@@ -503,6 +543,16 @@ export default function AdminPanel() {
     const esVenta = outcome === 'closed'
     if (esVenta && itemsEdicion.length === 0) {
       setPanelError('La solicitud debe conservar al menos un producto para marcarla como vendida.')
+      return
+    }
+    if (!esVenta && !motivoCancelacion) {
+      setPanelError('Selecciona el motivo de la cancelación.')
+      return
+    }
+    if (esVenta && itemsEdicion.some(itemSinPrecio) && !confirmarSinPrecio) {
+      setPanelError(
+        'Hay productos sin precio definido o en $0. Corrige el precio o confirma la venta en la casilla de aviso.',
+      )
       return
     }
     const accion = esVenta
@@ -518,7 +568,14 @@ export default function AdminPanel() {
         items: itemsEdicion.map((item) => ({
           productId: item.productId,
           quantity: item.quantity,
+          unitPriceUsd: item.unitPriceUsd,
         })),
+        ...(esVenta
+          ? {}
+          : {
+              cancellationReason: motivoCancelacion,
+              cancellationNote: notaCancelacion.trim() || undefined,
+            }),
       })
       setSolicitudSeleccionada(actualizada)
       setNotice(
@@ -552,11 +609,22 @@ export default function AdminPanel() {
       isActive: producto.isActive,
     })
     setModalProductoAbierto(true)
+    setAuditoriaProducto(null)
+    if (session) {
+      void obtenerAuditoriaAdmin(session.access_token, {
+        entityType: 'product',
+        entityId: producto.id,
+        pageSize: 1,
+      })
+        .then((pagina) => setAuditoriaProducto(pagina.items[0] ?? null))
+        .catch(() => setAuditoriaProducto(null))
+    }
   }
 
   function abrirProductoNuevo() {
     setProductoEnEdicion(null)
     setFormularioProducto(productoVacio)
+    setAuditoriaProducto(null)
     setModalProductoAbierto(true)
   }
 
@@ -564,6 +632,7 @@ export default function AdminPanel() {
     setModalProductoAbierto(false)
     setProductoEnEdicion(null)
     setFormularioProducto(productoVacio)
+    setAuditoriaProducto(null)
   }
 
   async function guardarProducto(event: FormEvent<HTMLFormElement>) {
@@ -894,6 +963,16 @@ export default function AdminPanel() {
                   valor={formatoMoneda(metricas?.cancelledEstimatedValueUsd ?? null)}
                 />
                 <TarjetaMetrica
+                  titulo="Valor solicitado"
+                  valor={formatoMoneda(metricas?.originalEstimatedValueUsd ?? null)}
+                  detalle="Antes de ajustes del administrador"
+                />
+                <TarjetaMetrica
+                  titulo="Ventas sin precio"
+                  valor={metricas ? String(metricas.closedWithoutPriceRequests ?? 0) : '—'}
+                  detalle="Cerradas con total por confirmar"
+                />
+                <TarjetaMetrica
                   titulo="Cerradas en el período"
                   valor={metricas ? String(metricas.closedDuringPeriod) : '—'}
                 />
@@ -933,6 +1012,12 @@ export default function AdminPanel() {
                             >
                               {etiquetaEstado(solicitud.status)}
                             </span>
+                            {solicitud.hasUnpricedItems &&
+                              solicitud.status === 'requested' && (
+                                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                                  Sin precio
+                                </span>
+                              )}
                           </div>
                           <p className="mt-1 truncate text-xs text-neutral-500">
                             {formatoFechaHora(solicitud.createdAt)} ·{' '}
@@ -1018,77 +1103,140 @@ export default function AdminPanel() {
                         ? itemsEdicion
                         : solicitudSeleccionada.items
                       ).map((item) => (
-                        <li key={item.productId} className="flex items-start justify-between gap-3 py-3">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-neutral-800">
-                              {item.productName}
-                            </p>
-                            <p className="mt-0.5 text-xs text-neutral-500">
-                              {solicitudSeleccionada.status === 'requested'
-                                ? `${formatoMoneda(item.unitPriceUsd)} · ${item.categoryName}`
-                                : `${item.quantity} × ${formatoMoneda(item.unitPriceUsd)} · ${item.categoryName}`}
-                            </p>
-                          </div>
-                          {solicitudSeleccionada.status === 'requested' ? (
-                            <div className="flex shrink-0 items-center gap-2">
-                              <div className="flex items-center rounded-lg border border-neutral-200">
-                                <button
-                                  type="button"
-                                  aria-label={`Quitar una unidad de ${item.productName}`}
-                                  onClick={() => ajustarCantidadSolicitud(item.productId, -1)}
-                                  disabled={item.quantity <= 1}
-                                  className="flex h-8 w-8 items-center justify-center text-neutral-600 disabled:opacity-30"
-                                >
-                                  <Minus className="h-3.5 w-3.5" />
-                                </button>
-                                <span className="w-7 text-center text-sm font-bold text-neutral-900">
-                                  {item.quantity}
+                        <li key={item.productId} className="py-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-neutral-800">
+                                {item.productName}
+                              </p>
+                              <p className="mt-0.5 text-xs text-neutral-500">
+                                {solicitudSeleccionada.status === 'requested'
+                                  ? `${
+                                      itemSinPrecio(item) ? 'Sin precio' : 'Precio definido'
+                                    } · ${item.categoryName}`
+                                  : `${item.quantity} × ${formatoMoneda(item.unitPriceUsd)} · ${item.categoryName}`}
+                              </p>
+                              {(item.originalQuantity ?? item.quantity) !== item.quantity && (
+                                <p className="mt-0.5 text-[11px] font-semibold text-amber-600">
+                                  El cliente pidió {item.originalQuantity} unidad(es)
+                                </p>
+                              )}
+                            </div>
+                            {solicitudSeleccionada.status === 'requested' ? (
+                              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                                <div className="flex items-center rounded-lg border border-neutral-200">
+                                  <button
+                                    type="button"
+                                    aria-label={`Quitar una unidad de ${item.productName}`}
+                                    onClick={() => ajustarCantidadSolicitud(item.productId, -1)}
+                                    disabled={item.quantity <= 1}
+                                    className="flex h-8 w-8 items-center justify-center text-neutral-600 disabled:opacity-30"
+                                  >
+                                    <Minus className="h-3.5 w-3.5" />
+                                  </button>
+                                  <span className="w-7 text-center text-sm font-bold text-neutral-900">
+                                    {item.quantity}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    aria-label={`Agregar una unidad de ${item.productName}`}
+                                    onClick={() => ajustarCantidadSolicitud(item.productId, 1)}
+                                    disabled={item.quantity >= 99}
+                                    className="flex h-8 w-8 items-center justify-center text-neutral-600 disabled:opacity-30"
+                                  >
+                                    <Plus className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                                <label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-400">
+                                  Precio
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    inputMode="decimal"
+                                    aria-label={`Precio unitario de ${item.productName}`}
+                                    value={
+                                      item.unitPriceUsd === null ? '' : String(item.unitPriceUsd)
+                                    }
+                                    onChange={(event) =>
+                                      ajustarPrecioItem(item.productId, event.target.value)
+                                    }
+                                    placeholder="0.00"
+                                    className={`h-8 w-24 rounded-lg border px-2 text-sm font-normal normal-case outline-none ${
+                                      itemSinPrecio(item)
+                                        ? 'border-amber-300 bg-amber-50 text-amber-800 focus:border-amber-400'
+                                        : 'border-neutral-200 text-neutral-900 focus:border-neutral-400'
+                                    }`}
+                                  />
+                                </label>
+                                <span className="w-16 text-right text-sm font-bold text-neutral-900">
+                                  {formatoMoneda(
+                                    item.unitPriceUsd === null
+                                      ? null
+                                      : item.unitPriceUsd * item.quantity,
+                                  )}
                                 </span>
                                 <button
                                   type="button"
-                                  aria-label={`Agregar una unidad de ${item.productName}`}
-                                  onClick={() => ajustarCantidadSolicitud(item.productId, 1)}
-                                  disabled={item.quantity >= 99}
-                                  className="flex h-8 w-8 items-center justify-center text-neutral-600 disabled:opacity-30"
+                                  aria-label={`Quitar ${item.productName} de la solicitud`}
+                                  onClick={() => quitarItemSolicitud(item.productId)}
+                                  disabled={itemsEdicion.length <= 1}
+                                  className="flex h-8 w-8 items-center justify-center rounded-lg text-rose-600 transition hover:bg-rose-50 disabled:opacity-30"
                                 >
-                                  <Plus className="h-3.5 w-3.5" />
+                                  <Trash2 className="h-4 w-4" />
                                 </button>
                               </div>
-                              <span className="w-16 text-right text-sm font-bold text-neutral-900">
-                                {formatoMoneda(
-                                  item.unitPriceUsd === null
-                                    ? null
-                                    : item.unitPriceUsd * item.quantity,
-                                )}
+                            ) : (
+                              <span className="shrink-0 text-sm font-bold text-neutral-900">
+                                {formatoMoneda(item.lineTotalUsd)}
                               </span>
-                              <button
-                                type="button"
-                                aria-label={`Quitar ${item.productName} de la solicitud`}
-                                onClick={() => quitarItemSolicitud(item.productId)}
-                                disabled={itemsEdicion.length <= 1}
-                                className="flex h-8 w-8 items-center justify-center rounded-lg text-rose-600 transition hover:bg-rose-50 disabled:opacity-30"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="shrink-0 text-sm font-bold text-neutral-900">
-                              {formatoMoneda(item.lineTotalUsd)}
-                            </span>
-                          )}
+                            )}
+                          </div>
                         </li>
                       ))}
                     </ul>
 
+                    {solicitudSeleccionada.status !== 'requested' &&
+                      (solicitudSeleccionada.removedItems ?? []).length > 0 && (
+                        <div className="mt-4 rounded-xl border border-neutral-100 bg-neutral-50 px-4 py-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">
+                            Productos quitados al finalizar
+                          </p>
+                          <ul className="mt-2 space-y-1">
+                            {(solicitudSeleccionada.removedItems ?? []).map((item) => (
+                              <li
+                                key={item.productId}
+                                className="text-xs text-neutral-400 line-through"
+                              >
+                                {item.quantity}× {item.productName}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
                     <div className="mt-4 flex items-center justify-between">
-                      <span className="text-sm text-neutral-500">Total estimado</span>
-                      <span className="text-lg font-extrabold text-neutral-900">
-                        {formatoMoneda(
-                          solicitudSeleccionada.status === 'requested'
-                            ? totalItemsSolicitud(itemsEdicion)
-                            : solicitudSeleccionada.estimatedTotalUsd,
-                        )}
+                      <span className="text-sm text-neutral-500">
+                        {etiquetaTotal(solicitudSeleccionada.status)}
                       </span>
+                      <div className="text-right">
+                        <span className="block text-lg font-extrabold text-neutral-900">
+                          {formatoMoneda(
+                            solicitudSeleccionada.status === 'requested'
+                              ? totalItemsSolicitud(itemsEdicion)
+                              : solicitudSeleccionada.estimatedTotalUsd,
+                          )}
+                        </span>
+                        {solicitudSeleccionada.status !== 'requested' &&
+                          solicitudSeleccionada.originalEstimatedTotalUsd != null &&
+                          solicitudSeleccionada.originalEstimatedTotalUsd !==
+                            solicitudSeleccionada.estimatedTotalUsd && (
+                            <span className="block text-[11px] text-neutral-400">
+                              Solicitado:{' '}
+                              {formatoMoneda(solicitudSeleccionada.originalEstimatedTotalUsd)}
+                            </span>
+                          )}
+                      </div>
                     </div>
 
                     <div className="mt-5">
@@ -1114,14 +1262,71 @@ export default function AdminPanel() {
                     {solicitudSeleccionada.status === 'requested' ? (
                       <div className="mt-5">
                         <p className="text-[11px] text-neutral-400">
-                          Puedes ajustar cantidades o quitar productos antes de finalizar. La venta
-                          suma a las estadísticas; la cancelación no suma, pero se conserva.
+                          Puedes ajustar cantidades, precios o quitar productos antes de finalizar.
+                          La venta suma a las estadísticas; la cancelación no suma, pero se conserva.
                         </p>
+
+                        {itemsEdicion.some(itemSinPrecio) && (
+                          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                            <p className="text-xs font-semibold text-amber-800">
+                              {itemsEdicion.filter(itemSinPrecio).length === 1
+                                ? '1 producto está sin precio o en $0.'
+                                : `${
+                                    itemsEdicion.filter(itemSinPrecio).length
+                                  } productos están sin precio o en $0.`}
+                            </p>
+                            <p className="mt-1 text-[11px] text-amber-700">
+                              Escribe el precio unitario acordado antes de venderlos, o confirma que
+                              se venden sin precio.
+                            </p>
+                            <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-amber-900">
+                              <input
+                                type="checkbox"
+                                checked={confirmarSinPrecio}
+                                onChange={(event) => setConfirmarSinPrecio(event.target.checked)}
+                                className="h-4 w-4 rounded border-amber-300"
+                              />
+                              Confirmo vender productos sin precio
+                            </label>
+                          </div>
+                        )}
+
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <label className="grid gap-1.5 text-sm font-medium text-neutral-700">
+                            Motivo de cancelación
+                            <select
+                              value={motivoCancelacion}
+                              onChange={(event) => setMotivoCancelacion(event.target.value)}
+                              className="h-10 rounded-lg border border-neutral-200 bg-white px-3 text-sm font-normal text-neutral-900 outline-none focus:border-neutral-400"
+                            >
+                              {MOTIVOS_CANCELACION.map((motivo) => (
+                                <option key={motivo.valor} value={motivo.valor}>
+                                  {motivo.etiqueta}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="grid gap-1.5 text-sm font-medium text-neutral-700">
+                            Nota de la cancelación (opcional)
+                            <input
+                              value={notaCancelacion}
+                              maxLength={500}
+                              placeholder="Detalle del motivo"
+                              onChange={(event) => setNotaCancelacion(event.target.value)}
+                              className="h-10 w-full rounded-lg border border-neutral-200 px-3 text-sm font-normal text-neutral-900 outline-none focus:border-neutral-400"
+                            />
+                          </label>
+                        </div>
+
                         <div className="mt-3 grid gap-2 sm:grid-cols-2">
                           <button
                             type="button"
                             onClick={() => void finalizarSolicitud(solicitudSeleccionada, 'closed')}
-                            disabled={cerrandoSolicitud || itemsEdicion.length === 0}
+                            disabled={
+                              cerrandoSolicitud ||
+                              itemsEdicion.length === 0 ||
+                              (itemsEdicion.some(itemSinPrecio) && !confirmarSinPrecio)
+                            }
                             className="h-11 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             {cerrandoSolicitud ? 'Guardando...' : 'Marcar como vendida'}
@@ -1139,11 +1344,21 @@ export default function AdminPanel() {
                         </div>
                       </div>
                     ) : (
-                      <p className="mt-5 rounded-xl bg-neutral-50 px-4 py-3 text-center text-sm font-semibold text-neutral-500">
-                        {solicitudSeleccionada.status === 'cancelled'
-                          ? 'Solicitud cancelada'
-                          : 'Solicitud cerrada (vendida)'}
-                      </p>
+                      <div className="mt-5">
+                        <p className="rounded-xl bg-neutral-50 px-4 py-3 text-center text-sm font-semibold text-neutral-500">
+                          {solicitudSeleccionada.status === 'cancelled'
+                            ? `Solicitud cancelada · ${etiquetaMotivoCancelacion(
+                                solicitudSeleccionada.cancellationReason,
+                              )}`
+                            : 'Solicitud cerrada (vendida)'}
+                        </p>
+                        {solicitudSeleccionada.status === 'cancelled' &&
+                          solicitudSeleccionada.cancellationNote && (
+                            <p className="mt-2 text-center text-xs text-neutral-500">
+                              {solicitudSeleccionada.cancellationNote}
+                            </p>
+                          )}
+                      </div>
                     )}
                   </div>
                 ) : (
@@ -1353,6 +1568,13 @@ export default function AdminPanel() {
                           ? 'Actualiza los datos y guarda los cambios.'
                           : 'Completa los datos para publicarlo en el catálogo.'}
                       </p>
+                      {productoEnEdicion && auditoriaProducto && (
+                        <p className="mt-1 text-[11px] text-neutral-400">
+                          Última edición por{' '}
+                          {auditoriaProducto.adminEmail ?? 'un administrador'} el{' '}
+                          {formatoFechaHora(auditoriaProducto.createdAt)}
+                        </p>
+                      )}
                     </div>
                     <button
                       type="button"
@@ -1406,6 +1628,13 @@ export default function AdminPanel() {
                         type: 'number',
                         min: '0',
                       })}
+                      {(formularioProducto.priceUsd.trim() === '' ||
+                        Number(formularioProducto.priceUsd) <= 0) && (
+                        <p className="-mt-2 text-[11px] text-amber-600 sm:col-span-2">
+                          Sin precio, el producto muestra «Consultar» y no aporta valor a las ventas
+                          cerradas. Define un precio antes de venderlo.
+                        </p>
+                      )}
                       {campoFormulario('Rango destacado (vacío = no destacado)', formularioProducto.topRank, (topRank) =>
                         setFormularioProducto((current) => ({ ...current, topRank })), {
                         type: 'number',

@@ -41,8 +41,21 @@ export interface ItemSolicitud {
   productSlug: string
   categoryName: string
   quantity: number
+  /** Cantidad pedida originalmente; llega desde la API que finaliza solicitudes. */
+  originalQuantity?: number
   unitPriceUsd: number | null
   lineTotalUsd: number | null
+}
+
+export interface ItemSolicitudQuitada {
+  productId: string
+  productName: string
+  productSlug: string
+  categoryName: string
+  quantity: number
+  originalQuantity: number
+  unitPriceUsd: number | null
+  removedAt: string | null
 }
 
 export interface HistorialSolicitud {
@@ -57,10 +70,15 @@ export interface SolicitudPedido {
   reference: string
   status: 'requested' | 'closed' | 'cancelled'
   estimatedTotalUsd: number | null
+  originalEstimatedTotalUsd?: number | null
   createdAt: string
   closedAt: string | null
   closedByAdminUserId: string | null
+  cancellationReason?: string | null
+  cancellationNote?: string | null
+  hasUnpricedItems?: boolean
   items: ItemSolicitud[]
+  removedItems?: ItemSolicitudQuitada[]
   history: HistorialSolicitud[]
 }
 
@@ -72,10 +90,40 @@ export interface MetricasSolicitudes {
   cancelledRequests: number
   openRequests: number
   estimatedValueUsd: number | null
+  originalEstimatedValueUsd?: number | null
   closedEstimatedValueUsd: number | null
   cancelledEstimatedValueUsd: number | null
+  closedWithoutPriceRequests?: number
   closeRate: number | null
   closedDuringPeriod: number
+}
+
+export interface CambioAuditoria {
+  before: unknown
+  after: unknown
+}
+
+export interface EntradaAuditoria {
+  id: string
+  adminUserId: string | null
+  adminEmail: string | null
+  entityType: string
+  entityId: string
+  action: string
+  changes: Record<string, CambioAuditoria>
+  createdAt: string
+}
+
+export const MOTIVOS_CANCELACION = [
+  { valor: 'price', etiqueta: 'Precio' },
+  { valor: 'stock', etiqueta: 'Sin disponibilidad' },
+  { valor: 'no_response', etiqueta: 'El cliente no respondió' },
+  { valor: 'regret', etiqueta: 'El cliente se arrepintió' },
+  { valor: 'other', etiqueta: 'Otro motivo' },
+] as const
+
+export function etiquetaMotivoCancelacion(valor: string | null | undefined): string {
+  return MOTIVOS_CANCELACION.find((motivo) => motivo.valor === valor)?.etiqueta ?? '—'
 }
 
 export interface PaginaSolicitudes {
@@ -289,7 +337,9 @@ export type ResultadoCierre = 'closed' | 'cancelled'
 
 export interface CierreSolicitudPayload {
   outcome: ResultadoCierre
-  items?: Array<{ productId: string; quantity: number }>
+  items?: Array<{ productId: string; quantity: number; unitPriceUsd?: number | null }>
+  cancellationReason?: string
+  cancellationNote?: string
 }
 
 export function cerrarSolicitudAdmin(
@@ -301,5 +351,26 @@ export function cerrarSolicitudAdmin(
     `/api/admin/orders/${encodeURIComponent(id)}/close`,
     token,
     { method: 'POST', body: JSON.stringify(payload) },
+  )
+}
+
+export async function obtenerAuditoriaAdmin(
+  token: string,
+  options: {
+    entityType?: string
+    entityId?: string
+    page?: number
+    pageSize?: number
+  } = {},
+): Promise<Pagina<EntradaAuditoria>> {
+  const params = new URLSearchParams({
+    page: String(options.page ?? 1),
+    pageSize: String(options.pageSize ?? 5),
+  })
+  if (options.entityType) params.set('entityType', options.entityType)
+  if (options.entityId) params.set('entityId', options.entityId)
+  return solicitarApiAdmin<Pagina<EntradaAuditoria>>(
+    `/api/admin/audit?${params}`,
+    token,
   )
 }
