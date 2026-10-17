@@ -126,7 +126,7 @@ public sealed class CustomerOrderService(
 
         logger.LogInformation(
             "Solicitud {Reference} de la tienda {Store} registrada con {ItemCount} producto(s) por {Total}.",
-            CustomerOrderMappings.Reference(order.Id),
+            CustomerOrderMappings.Reference(order),
             order.Store,
             order.Lines.Count,
             order.EstimatedTotalUsd);
@@ -287,7 +287,7 @@ public sealed class CustomerOrderService(
         logger.LogInformation(
             "Solicitud {Reference} de la tienda {Store} finalizada como {Outcome} por el "
                 + "admin {AdminUserId}; motivo {Reason}; total {Total}.",
-            CustomerOrderMappings.Reference(order.Id),
+            CustomerOrderMappings.Reference(order),
             order.Store,
             outcome,
             adminUserId,
@@ -298,7 +298,7 @@ public sealed class CustomerOrderService(
         {
             logger.LogWarning(
                 "La solicitud {Reference} se cerró como vendida con productos sin precio definido.",
-                CustomerOrderMappings.Reference(order.Id));
+                CustomerOrderMappings.Reference(order));
         }
 
         return CustomerOrderMappings.ToResponse(order);

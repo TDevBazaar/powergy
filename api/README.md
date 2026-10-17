@@ -23,6 +23,8 @@ The existing JSON catalog has 85 products across three categories. The initial m
 - Store keys are lowercase and 2 to 40 characters long (letters, numbers, `-` or `_`). Invalid keys are rejected with a validation error.
 - Products and categories are scoped to their store: a product update or deactivation only finds records of the same store, and a product must reference a category of its own store.
 - Slugs are unique per store (`unique (store, slug)`), so two stores can reuse the same slug.
+- Order references carry a per-store prefix: `PG-XXXXXXXX` for `powergy` and, for any other store, the first letter of each part of its key (`nova-moda` → `NM-XXXXXXXX`).
+- The `nova-moda` store starts with three empty categories (Mujer, Hombre, Accesorios) seeded by the `20261017211644_SeedNovaModaCategories` migration; the frontend of that store lives in `nova-moda/`.
 
 ## Local configuration
 

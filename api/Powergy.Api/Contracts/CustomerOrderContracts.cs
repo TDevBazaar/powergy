@@ -199,7 +199,7 @@ public static class CustomerOrderMappings
 
     public static CustomerOrderResponse ToResponse(CustomerOrder order) => new(
         order.Id,
-        Reference(order.Id),
+        Reference(order),
         order.Status,
         order.Store,
         order.EstimatedTotalUsd,
@@ -228,7 +228,7 @@ public static class CustomerOrderMappings
         var activas = order.Lines.Where(line => line.RemovedAt is null).ToArray();
         return new CustomerOrderListItemResponse(
             order.Id,
-            Reference(order.Id),
+            Reference(order),
             order.Status,
             order.Store,
             order.EstimatedTotalUsd,
@@ -242,8 +242,31 @@ public static class CustomerOrderMappings
             activas.OrderBy(line => line.ProductName).Select(ToResponse).ToArray());
     }
 
-    public static string Reference(Guid id) =>
-        $"PG-{id.ToString("N")[..8].ToUpperInvariant()}";
+    public static string Reference(CustomerOrder order) =>
+        Reference(order.Id, order.Store);
+
+    public static string Reference(Guid id, string store) =>
+        $"{StorePrefix(store)}-{id.ToString("N")[..8].ToUpperInvariant()}";
+
+    /// <summary>Prefijo por tienda: POWERGY → PG, nova-moda → NM.</summary>
+    private static string StorePrefix(string store)
+    {
+        if (StoreKeys.Powergy.Equals(store, StringComparison.OrdinalIgnoreCase))
+        {
+            return "PG";
+        }
+
+        var partes = store
+            .Split(['-', '_'], StringSplitOptions.RemoveEmptyEntries)
+            .Where(parte => char.IsAsciiLetterOrDigit(parte[0]))
+            .ToArray();
+        var prefijo = partes.Length > 1
+            ? string.Concat(partes.Take(3).Select(parte => char.ToUpperInvariant(parte[0])))
+            : new string(store.Where(char.IsAsciiLetterOrDigit).ToArray().Take(2).ToArray())
+                .ToUpperInvariant();
+
+        return prefijo.Length > 0 ? prefijo : "ST";
+    }
 
     private static DateTimeOffset Utc(DateTime value) =>
         new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
