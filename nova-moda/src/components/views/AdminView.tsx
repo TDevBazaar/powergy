@@ -102,14 +102,12 @@ const emptyProduct: ProductForm = {
 interface CategoryForm {
   id: string | null;
   name: string;
-  slug: string;
   sortOrder: string;
 }
 
 const emptyCategory: CategoryForm = {
   id: null,
   name: "",
-  slug: "",
   sortOrder: "0",
 };
 
@@ -434,14 +432,14 @@ export function AdminView() {
   const guardarCategoria = async () => {
     if (!token) return;
     const name = formCategoria.name.trim();
-    const slug = (formCategoria.slug.trim() || slugify(name)).toLowerCase();
+    const slug = slugify(name);
     const orden = Number.parseInt(formCategoria.sortOrder, 10);
     if (name.length < 2) {
       toast.error("El nombre de la categoría es muy corto.");
       return;
     }
     if (!slug) {
-      toast.error("Indica un enlace (slug) para la categoría.");
+      toast.error("El nombre debe contener letras o números.");
       return;
     }
 
@@ -988,7 +986,6 @@ export function AdminView() {
                             setFormCategoria({
                               id: c.id,
                               name: c.name,
-                              slug: c.slug,
                               sortOrder: String(c.sortOrder),
                             });
                             setModalCategoria(true);
@@ -1320,34 +1317,20 @@ export function AdminView() {
                 className="mt-1.5 h-11 rounded-2xl border-input bg-background"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="c-slug">Enlace (slug)</Label>
-                <Input
-                  id="c-slug"
-                  value={formCategoria.slug}
-                  onChange={(e) =>
-                    setFormCategoria({ ...formCategoria, slug: e.target.value })
-                  }
-                  placeholder="mujer"
-                  className="mt-1.5 h-11 rounded-2xl border-input bg-background"
-                />
-              </div>
-              <div>
-                <Label htmlFor="c-order">Orden</Label>
-                <Input
-                  id="c-order"
-                  value={formCategoria.sortOrder}
-                  onChange={(e) =>
-                    setFormCategoria({
-                      ...formCategoria,
-                      sortOrder: e.target.value,
-                    })
-                  }
-                  inputMode="numeric"
-                  className="mt-1.5 h-11 rounded-2xl border-input bg-background"
-                />
-              </div>
+            <div>
+              <Label htmlFor="c-order">Orden</Label>
+              <Input
+                id="c-order"
+                value={formCategoria.sortOrder}
+                onChange={(e) =>
+                  setFormCategoria({
+                    ...formCategoria,
+                    sortOrder: e.target.value,
+                  })
+                }
+                inputMode="numeric"
+                className="mt-1.5 h-11 rounded-2xl border-input bg-background"
+              />
             </div>
           </div>
           <DialogFooter className="mt-2 gap-2">
