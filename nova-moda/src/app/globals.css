@@ -1,0 +1,172 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-poppins);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* ── Paleta NOVA MODA ─────────────────────────── */
+  --color-cream: var(--nova-cream);
+  --color-cream-deep: var(--nova-cream-deep);
+  --color-sand: var(--nova-sand);
+  --color-camel: var(--nova-camel);
+  --color-camel-deep: var(--nova-camel-deep);
+  --color-ink: var(--nova-ink);
+}
+
+:root {
+  --radius: 1.1rem;
+
+  /* NOVA MODA — crema / arena / camel / tinta */
+  --nova-cream: #f7f1e8;
+  --nova-cream-deep: #f0e6d6;
+  --nova-sand: #e3d5bf;
+  --nova-camel: #b08968;
+  --nova-camel-deep: #8f6a4b;
+  --nova-ink: #221c15;
+
+  --background: #f7f1e8;
+  --foreground: #221c15;
+  --card: #fffdf9;
+  --card-foreground: #221c15;
+  --popover: #fffdf9;
+  --popover-foreground: #221c15;
+  --primary: #221c15;
+  --primary-foreground: #fbf6ee;
+  --secondary: #efe6d6;
+  --secondary-foreground: #221c15;
+  --muted: #efe8db;
+  --muted-foreground: #8b7d6b;
+  --accent: #e9dcc6;
+  --accent-foreground: #221c15;
+  --destructive: #b3402e;
+  --destructive-foreground: #fbf6ee;
+  --border: #e6dcc9;
+  --input: #e0d5c1;
+  --ring: #b08968;
+  --chart-1: #b08968;
+  --chart-2: #8f6a4b;
+  --chart-3: #e3d5bf;
+  --chart-4: #5c4633;
+  --chart-5: #d9bfa7;
+  --sidebar: #f7f1e8;
+  --sidebar-foreground: #221c15;
+  --sidebar-primary: #221c15;
+  --sidebar-primary-foreground: #fbf6ee;
+  --sidebar-accent: #efe6d6;
+  --sidebar-accent-foreground: #221c15;
+  --sidebar-border: #e6dcc9;
+  --sidebar-ring: #b08968;
+}
+
+.dark {
+  --background: #17130e;
+  --foreground: #f3ecdf;
+  --card: #1f1a13;
+  --card-foreground: #f3ecdf;
+  --popover: #1f1a13;
+  --popover-foreground: #f3ecdf;
+  --primary: #f3ecdf;
+  --primary-foreground: #221c15;
+  --secondary: #2a231a;
+  --secondary-foreground: #f3ecdf;
+  --muted: #2a231a;
+  --muted-foreground: #b3a48e;
+  --accent: #33291d;
+  --accent-foreground: #f3ecdf;
+  --destructive: #d2604d;
+  --destructive-foreground: #f3ecdf;
+  --border: #33291d;
+  --input: #33291d;
+  --ring: #b08968;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: var(--nova-sand);
+    color: var(--nova-ink);
+  }
+}
+
+@layer utilities {
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .shadow-soft {
+    box-shadow: 0 24px 48px -28px rgb(34 28 21 / 0.28);
+  }
+  .shadow-card {
+    box-shadow: 0 12px 28px -20px rgb(34 28 21 / 0.22);
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Scrollbar fino y cálido para listas con scroll */
+.nice-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--nova-sand) transparent;
+}
+.nice-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.nice-scroll::-webkit-scrollbar-thumb {
+  background: var(--nova-sand);
+  border-radius: 999px;
+}
+.nice-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
