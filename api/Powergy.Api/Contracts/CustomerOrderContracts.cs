@@ -162,7 +162,7 @@ public static class CustomerOrderMappings
         line.ProductSlug,
         line.CategoryName,
         line.Quantity,
-        line.OriginalQuantity,
+        CantidadOriginal(line),
         line.UnitPriceUsd,
         line.UnitPriceUsd * line.Quantity);
 
@@ -172,9 +172,16 @@ public static class CustomerOrderMappings
         line.ProductSlug,
         line.CategoryName,
         line.Quantity,
-        line.OriginalQuantity,
+        CantidadOriginal(line),
         line.UnitPriceUsd,
         line.RemovedAt is null ? null : Utc(line.RemovedAt.Value));
+
+    /// <summary>
+    /// Cantidad pedida originalmente. Las solicitudes escritas por una versión anterior
+    /// del API durante la migración pueden tener cero, así que se usa la cantidad actual.
+    /// </summary>
+    public static int CantidadOriginal(CustomerOrderLine line) =>
+        line.OriginalQuantity > 0 ? line.OriginalQuantity : line.Quantity;
 
     public static CustomerOrderResponse ToResponse(CustomerOrder order) => new(
         order.Id,

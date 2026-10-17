@@ -1116,11 +1116,13 @@ export default function AdminPanel() {
                                     } · ${item.categoryName}`
                                   : `${item.quantity} × ${formatoMoneda(item.unitPriceUsd)} · ${item.categoryName}`}
                               </p>
-                              {(item.originalQuantity ?? item.quantity) !== item.quantity && (
-                                <p className="mt-0.5 text-[11px] font-semibold text-amber-600">
-                                  El cliente pidió {item.originalQuantity} unidad(es)
-                                </p>
-                              )}
+                              {item.originalQuantity !== undefined &&
+                                item.originalQuantity > 0 &&
+                                item.originalQuantity !== item.quantity && (
+                                  <p className="mt-0.5 text-[11px] font-semibold text-amber-600">
+                                    El cliente pidió {item.originalQuantity} unidad(es)
+                                  </p>
+                                )}
                             </div>
                             {solicitudSeleccionada.status === 'requested' ? (
                               <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
