@@ -70,7 +70,6 @@ const STATUS_STYLES: Record<string, string> = {
 interface ProductForm {
   id: string | null;
   name: string;
-  slug: string;
   categoryId: string;
   subcategory: string;
   brand: string;
@@ -86,7 +85,6 @@ interface ProductForm {
 const emptyProduct: ProductForm = {
   id: null,
   name: "",
-  slug: "",
   categoryId: "",
   subcategory: "",
   brand: "",
@@ -285,7 +283,6 @@ export function AdminView() {
     setFormProducto({
       id: producto.id,
       name: producto.name,
-      slug: producto.slug,
       categoryId: producto.categoryId,
       subcategory: producto.subcategory,
       brand: producto.brand,
@@ -303,13 +300,13 @@ export function AdminView() {
   const guardarProducto = async () => {
     if (!token) return;
     const name = formProducto.name.trim();
-    const slug = (formProducto.slug.trim() || slugify(name)).toLowerCase();
+    const slug = slugify(name);
     if (name.length < 3) {
       toast.error("El nombre necesita al menos 3 caracteres.");
       return;
     }
     if (!slug) {
-      toast.error("Indica un enlace (slug) para el producto.");
+      toast.error("El nombre debe contener letras o números.");
       return;
     }
     if (!formProducto.categoryId) {
@@ -1184,10 +1181,8 @@ export function AdminView() {
                 <Label htmlFor="p-slug">Enlace (slug)</Label>
                 <Input
                   id="p-slug"
-                  value={formProducto.slug}
-                  onChange={(e) =>
-                    setFormProducto({ ...formProducto, slug: e.target.value })
-                  }
+                  value={slugify(formProducto.name)}
+                  readOnly
                   placeholder="blazer-de-lino"
                   className="mt-1.5 h-11 rounded-2xl border-input bg-background"
                 />
