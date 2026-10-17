@@ -22,6 +22,57 @@ namespace Powergy.Api.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Powergy.Api.Models.AdminAuditLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("action");
+
+                    b.Property<Guid?>("AdminUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("admin_user_id");
+
+                    b.Property<string>("Changes")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("changes");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("EntityId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("entity_type");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AdminUserId");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("EntityType", "EntityId", "CreatedAt");
+
+                    b.ToTable("admin_audit_log", (string)null);
+                });
+
             modelBuilder.Entity("Powergy.Api.Models.AdminUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -148,6 +199,16 @@ namespace Powergy.Api.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("CancellationNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("cancellation_note");
+
+                    b.Property<string>("CancellationReason")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("cancellation_reason");
+
                     b.Property<DateTime?>("ClosedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("closed_at");
@@ -170,6 +231,11 @@ namespace Powergy.Api.Migrations
                     b.Property<Guid>("IdempotencyKey")
                         .HasColumnType("uuid")
                         .HasColumnName("idempotency_key");
+
+                    b.Property<decimal?>("OriginalEstimatedTotalUsd")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("original_estimated_total_usd");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -210,6 +276,10 @@ namespace Powergy.Api.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("order_id");
 
+                    b.Property<int>("OriginalQuantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("original_quantity");
+
                     b.Property<string>("ProductId")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -232,6 +302,14 @@ namespace Powergy.Api.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("quantity");
 
+                    b.Property<DateTime?>("RemovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("removed_at");
+
+                    b.Property<Guid?>("RemovedByAdminUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("removed_by_admin_user_id");
+
                     b.Property<decimal?>("UnitPriceUsd")
                         .HasPrecision(12, 2)
                         .HasColumnType("numeric(12,2)")
@@ -240,6 +318,10 @@ namespace Powergy.Api.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("OrderId");
+
+                    b.HasIndex("RemovedByAdminUserId");
+
+                    b.HasIndex("OrderId", "RemovedAt");
 
                     b.ToTable("customer_order_lines", (string)null);
                 });
@@ -392,6 +474,16 @@ namespace Powergy.Api.Migrations
                     b.ToTable("products", (string)null);
                 });
 
+            modelBuilder.Entity("Powergy.Api.Models.AdminAuditLog", b =>
+                {
+                    b.HasOne("Powergy.Api.Models.AdminUser", "AdminUser")
+                        .WithMany("AuditLogs")
+                        .HasForeignKey("AdminUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("AdminUser");
+                });
+
             modelBuilder.Entity("Powergy.Api.Models.CustomerOrder", b =>
                 {
                     b.HasOne("Powergy.Api.Models.AdminUser", "ClosedByAdminUser")
@@ -410,7 +502,14 @@ namespace Powergy.Api.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Powergy.Api.Models.AdminUser", "RemovedByAdminUser")
+                        .WithMany("RemovedOrderLines")
+                        .HasForeignKey("RemovedByAdminUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Order");
+
+                    b.Navigation("RemovedByAdminUser");
                 });
 
             modelBuilder.Entity("Powergy.Api.Models.CustomerOrderStatusHistory", b =>
@@ -437,7 +536,11 @@ namespace Powergy.Api.Migrations
 
             modelBuilder.Entity("Powergy.Api.Models.AdminUser", b =>
                 {
+                    b.Navigation("AuditLogs");
+
                     b.Navigation("ClosedOrders");
+
+                    b.Navigation("RemovedOrderLines");
                 });
 
             modelBuilder.Entity("Powergy.Api.Models.Category", b =>

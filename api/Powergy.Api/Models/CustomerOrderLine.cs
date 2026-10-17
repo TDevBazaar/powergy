@@ -10,5 +10,15 @@ public sealed class CustomerOrderLine
     public string ProductSlug { get; set; } = string.Empty;
     public string CategoryName { get; set; } = string.Empty;
     public int Quantity { get; set; }
+
+    /// <summary>Cantidad solicitada originalmente, antes de los ajustes del administrador.</summary>
+    public int OriginalQuantity { get; set; }
+
     public decimal? UnitPriceUsd { get; set; }
+
+    /// <summary>Fecha en que un administrador quitó el producto de la solicitud.</summary>
+    public DateTime? RemovedAt { get; set; }
+
+    public Guid? RemovedByAdminUserId { get; set; }
+    public AdminUser? RemovedByAdminUser { get; set; }
 }

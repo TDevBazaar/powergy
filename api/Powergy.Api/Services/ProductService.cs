@@ -7,7 +7,7 @@ using Powergy.Api.Specifications;
 
 namespace Powergy.Api.Services;
 
-public sealed class ProductService(PowergyDbContext db) : IProductService
+public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) : IProductService
 {
     public Task<PagedResponse<ProductResponse>> GetPublicPageAsync(
         ProductQueryRequest request,
@@ -76,6 +76,28 @@ public sealed class ProductService(PowergyDbContext db) : IProductService
         db.Products.Add(product);
         await db.SaveChangesAsync(cancellationToken);
         await db.Entry(product).Reference(item => item.Category).LoadAsync(cancellationToken);
+
+        await audit.RecordAsync(
+            AuditEntityTypes.Product,
+            product.Id,
+            AuditActions.Create,
+            new AuditChangeSet()
+                .Add("slug", null, product.Slug)
+                .Add("categoryId", null, product.CategoryId)
+                .Add("name", null, product.Name)
+                .Add("brand", null, product.Brand)
+                .Add("model", null, product.Model)
+                .Add("subcategory", null, product.Subcategory)
+                .Add("priceUsd", null, product.PriceUsd)
+                .Add("primaryImage", null, product.PrimaryImage)
+                .Add("onSale", null, product.OnSale)
+                .Add("warranty", null, product.Warranty)
+                .Add("transport", null, product.Transport)
+                .Add("invoice", null, product.Invoice)
+                .Add("topRank", null, product.TopRank)
+                .Build(),
+            cancellationToken);
+
         return ProductResponse.From(product);
     }
 
@@ -105,6 +127,25 @@ public sealed class ProductService(PowergyDbContext db) : IProductService
             throw new ApiConflictException("El slug ya está en uso.");
         }
 
+        var anterior = new
+        {
+            product.Slug,
+            product.CategoryId,
+            product.Subcategory,
+            product.Brand,
+            product.Model,
+            product.Name,
+            product.PriceUsd,
+            product.Specifications,
+            product.PrimaryImage,
+            product.OnSale,
+            product.Warranty,
+            product.Transport,
+            product.Invoice,
+            product.TopRank,
+            product.IsActive
+        };
+
         product.Slug = slug;
         product.CategoryId = request.CategoryId;
         product.Category = category;
@@ -123,6 +164,31 @@ public sealed class ProductService(PowergyDbContext db) : IProductService
         product.IsActive = request.IsActive;
 
         await db.SaveChangesAsync(cancellationToken);
+
+        await audit.RecordAsync(
+            AuditEntityTypes.Product,
+            product.Id,
+            AuditActions.Update,
+            new AuditChangeSet()
+                .Add("slug", anterior.Slug, product.Slug)
+                .Add("categoryId", anterior.CategoryId, product.CategoryId)
+                .Add("subcategory", anterior.Subcategory, product.Subcategory)
+                .Add("brand", anterior.Brand, product.Brand)
+                .Add("model", anterior.Model, product.Model)
+                .Add("name", anterior.Name, product.Name)
+                .Add("priceUsd", anterior.PriceUsd, product.PriceUsd)
+                .Add("specifications", Recortar(anterior.Specifications),
+                    Recortar(product.Specifications))
+                .Add("primaryImage", anterior.PrimaryImage, product.PrimaryImage)
+                .Add("onSale", anterior.OnSale, product.OnSale)
+                .Add("warranty", anterior.Warranty, product.Warranty)
+                .Add("transport", anterior.Transport, product.Transport)
+                .Add("invoice", anterior.Invoice, product.Invoice)
+                .Add("topRank", anterior.TopRank, product.TopRank)
+                .Add("isActive", anterior.IsActive, product.IsActive)
+                .Build(),
+            cancellationToken);
+
         return ProductResponse.From(product);
     }
 
@@ -133,9 +199,22 @@ public sealed class ProductService(PowergyDbContext db) : IProductService
             cancellationToken)
             ?? throw new ApiNotFoundException("No se encontró el producto.");
 
-        product.IsActive = false;
-        await db.SaveChangesAsync(cancellationToken);
+        if (product.IsActive)
+        {
+            product.IsActive = false;
+            await db.SaveChangesAsync(cancellationToken);
+
+            await audit.RecordAsync(
+                AuditEntityTypes.Product,
+                product.Id,
+                AuditActions.Deactivate,
+                new AuditChangeSet().Add("isActive", true, false).Build(),
+                cancellationToken);
+        }
     }
+
+    private static string? Recortar(string? value, int maximo = 500) =>
+        value is null || value.Length <= maximo ? value : $"{value[..maximo]}…";
 
     private async Task<PagedResponse<ProductResponse>> GetPageAsync(
         ProductQueryRequest request,

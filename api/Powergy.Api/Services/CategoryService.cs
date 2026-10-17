@@ -6,7 +6,7 @@ using Powergy.Api.Models;
 
 namespace Powergy.Api.Services;
 
-public sealed class CategoryService(PowergyDbContext db) : ICategoryService
+public sealed class CategoryService(PowergyDbContext db, IAuditLogService audit) : ICategoryService
 {
     public async Task<IReadOnlyList<CategoryResponse>> GetAllAsync(
         bool includeInactive,
@@ -62,6 +62,18 @@ public sealed class CategoryService(PowergyDbContext db) : ICategoryService
 
         db.Categories.Add(category);
         await db.SaveChangesAsync(cancellationToken);
+
+        await audit.RecordAsync(
+            AuditEntityTypes.Category,
+            category.Id.ToString(),
+            AuditActions.Create,
+            new AuditChangeSet()
+                .Add("name", null, category.Name)
+                .Add("slug", null, category.Slug)
+                .Add("sortOrder", null, category.SortOrder)
+                .Build(),
+            cancellationToken);
+
         return CategoryResponse.From(category);
     }
 
@@ -83,11 +95,26 @@ public sealed class CategoryService(PowergyDbContext db) : ICategoryService
             throw new ApiConflictException("El slug ya está en uso.");
         }
 
+        var anterior = new { category.Name, category.Slug, category.SortOrder, category.IsActive };
+
         category.Name = RequiredText(request.Name, nameof(request.Name));
         category.Slug = slug;
         category.SortOrder = request.SortOrder;
         category.IsActive = true;
         await db.SaveChangesAsync(cancellationToken);
+
+        await audit.RecordAsync(
+            AuditEntityTypes.Category,
+            category.Id.ToString(),
+            AuditActions.Update,
+            new AuditChangeSet()
+                .Add("name", anterior.Name, category.Name)
+                .Add("slug", anterior.Slug, category.Slug)
+                .Add("sortOrder", anterior.SortOrder, category.SortOrder)
+                .Add("isActive", anterior.IsActive, category.IsActive)
+                .Build(),
+            cancellationToken);
+
         return CategoryResponse.From(category);
     }
 
@@ -98,8 +125,18 @@ public sealed class CategoryService(PowergyDbContext db) : ICategoryService
             cancellationToken)
             ?? throw new ApiNotFoundException("No se encontró la categoría.");
 
-        category.IsActive = false;
-        await db.SaveChangesAsync(cancellationToken);
+        if (category.IsActive)
+        {
+            category.IsActive = false;
+            await db.SaveChangesAsync(cancellationToken);
+
+            await audit.RecordAsync(
+                AuditEntityTypes.Category,
+                category.Id.ToString(),
+                AuditActions.Deactivate,
+                new AuditChangeSet().Add("isActive", true, false).Build(),
+                cancellationToken);
+        }
     }
 
     private static string RequiredText(string value, string fieldName)

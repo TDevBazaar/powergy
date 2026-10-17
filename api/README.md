@@ -7,9 +7,10 @@ ASP.NET Core 10 API with Entity Framework Core Code First and PostgreSQL on Supa
 - `categories`: catalog categories, URL slug, display order and active state.
 - `products`: catalog fields, nullable USD price, offer/service flags, image path, bestseller rank and active state.
 - `admin_users`: allowlist of Supabase Auth user IDs authorized to administer the catalog.
-- `customer_orders`: catalog order requests recorded before the customer opens WhatsApp, with an idempotency key, status, estimated total and closure metadata.
-- `customer_order_lines`: snapshot of the requested products (name, slug, category, quantity and unit price) for each order.
+- `customer_orders`: catalog order requests recorded before the customer opens WhatsApp, with an idempotency key, status, estimated total, the original estimated total and closure metadata (acting administrator, cancellation reason and note).
+- `customer_order_lines`: snapshot of the requested products (name, slug, category, quantity and unit price) for each order. Lines removed while closing keep `original_quantity`, `removed_at` and `removed_by_admin_user_id` so the request history is never lost.
 - `customer_order_status_history`: append-only status transitions with the acting administrator and timestamp.
+- `admin_audit_log`: administrative audit trail for catalog and category changes, with the acting administrator, entity, action and a JSON diff of the changed fields.
 
 The existing JSON catalog has 85 products across three categories. The initial migration creates the schema and seeds the three categories; it does not import products yet. Product IDs are strings so the current IDs can be preserved during the catalog import. `top_ventas` is represented by a nullable `top_rank` (a rank means featured); the JSON's duplicate `ecoflow-delta-2-max` slug must be made unique before importing.
 
@@ -79,6 +80,23 @@ dotnet ef migrations add <MigrationName> --project .\Powergy.Api
 
 Supabase is PostgreSQL, so EF Core Code First works through the Npgsql provider. Migration commands connect to the configured Supabase PostgreSQL database; the API does not automatically modify the schema at startup.
 
+When no direct database connection is available (for example, during a guided production rollout), generate an idempotent script and run it in the Supabase SQL Editor:
+
+```powershell
+dotnet ef migrations script --idempotent --project .\Powergy.Api --output .\Powergy.Api\Sql\<date>-<change>.sql
+```
+
+The generated script only applies pending migrations, because every step is guarded by the `__EFMigrationsHistory` table. `Sql/20261017-audit-order-finalization.sql` is the script for the audit trail, the order-finishing columns and the line-preservation columns; it also backfills `original_quantity` and `original_estimated_total_usd` for existing rows.
+
+## Observability
+
+- Serilog writes structured logs to the console and to rotating daily files under `logs/` inside the application directory (`powergy-<date>.log`, 10 MB per file, seven files retained).
+- `UseSerilogRequestLogging` records one entry per request with the method, path, status code and elapsed time; `/health` requests are logged at `Verbose` so they do not flood the file.
+- Every `ProblemDetails` response includes a `traceId` extension that matches the request log entry, so a user-visible error can be traced back to the exact request.
+- Administrative catalog and category changes are stored in `admin_audit_log` with the previous and new value of each changed field.
+- Public catalog responses (`GET /api/products`, `GET /api/products/{slug}`, `GET /api/categories`, `GET /api/categories/{id}`) send `Cache-Control: public, max-age=60, stale-while-revalidate=300`; admin routes never send a cache header.
+- Responses are gzip-compressed and request bodies are limited to 256 KB.
+
 ## Authentication and administrator setup
 
 The API validates Supabase access tokens using the project's Auth OpenID metadata/JWKS endpoint. Use an asymmetric JWT signing key configuration exposed by the Supabase JWKS endpoint. Create administrators in Supabase Auth, then allowlist their Auth user UUID in `admin_users`:
@@ -102,7 +120,8 @@ Product POST requests accept an optional `id`; this allows importing the existin
 - `GET /api/categories/admin` and `GET /api/products/admin` — admin catalog views.
 - `POST`, `PUT` and `DELETE` under `/api/categories` and `/api/products` — admin-only category/product management. DELETE deactivates rather than permanently removing records.
 - `POST /api/orders` — records an idempotent WhatsApp order request for the catalog cart.
-- `GET /api/admin/orders`, `GET /api/admin/orders/metrics`, `GET /api/admin/orders/{id}` and `POST /api/admin/orders/{id}/close` — admin-only listing, statistics, detail and closure of order requests.
+- `GET /api/admin/orders`, `GET /api/admin/orders/metrics`, `GET /api/admin/orders/{id}` and `POST /api/admin/orders/{id}/close` — admin-only listing, statistics, detail and closure of order requests. Closing accepts `closed` (sale) or `cancelled` (with `cancellationReason` and optional `cancellationNote`), plus the final `items` array where the administrator can adjust quantities, set the final unit price and remove products. Closing an already closed request is idempotent and returns the stored state.
+- `GET /api/admin/audit` — admin-only audit trail paged by `entityType`, `entityId`, `page` and `pageSize`.
 - `GET /health` — API/database connectivity check.
 
 Product response fields preserve the current frontend catalog names (`price_usd`, `primary_image`, `oferta`, `garantia`, `transporte`, `factura`, `top_ventas`, `top_rank`). The admin panel uploads product images to the `powergy-product-images` Supabase Storage bucket and saves their public URLs in `primary_image`.

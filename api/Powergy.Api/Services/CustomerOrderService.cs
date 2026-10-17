@@ -7,7 +7,9 @@ using Powergy.Api.Models;
 
 namespace Powergy.Api.Services;
 
-public sealed class CustomerOrderService(PowergyDbContext db) : ICustomerOrderService
+public sealed class CustomerOrderService(
+    PowergyDbContext db,
+    ILogger<CustomerOrderService> logger) : ICustomerOrderService
 {
     private const int MaxDistinctItems = 20;
     private const int MaxQuantityPerProduct = 99;
@@ -82,14 +84,14 @@ public sealed class CustomerOrderService(PowergyDbContext db) : ICustomerOrderSe
                     ProductSlug = product.Slug,
                     CategoryName = product.Category.Name,
                     Quantity = item.Quantity,
+                    OriginalQuantity = item.Quantity,
                     UnitPriceUsd = product.PriceUsd
                 };
             }).ToList()
         };
 
-        order.EstimatedTotalUsd = order.Lines.All(line => line.UnitPriceUsd.HasValue)
-            ? order.Lines.Sum(line => line.UnitPriceUsd!.Value * line.Quantity)
-            : null;
+        order.EstimatedTotalUsd = TotalEstimado(order.Lines);
+        order.OriginalEstimatedTotalUsd = order.EstimatedTotalUsd;
         order.StatusHistory.Add(new CustomerOrderStatusHistory
         {
             Id = Guid.NewGuid(),
@@ -118,6 +120,12 @@ public sealed class CustomerOrderService(PowergyDbContext db) : ICustomerOrderSe
             throw;
         }
 
+        logger.LogInformation(
+            "Solicitud {Reference} registrada con {ItemCount} producto(s) por {Total}.",
+            CustomerOrderMappings.Reference(order.Id),
+            order.Lines.Count,
+            order.EstimatedTotalUsd);
+
         return CustomerOrderMappings.ToResponse(order);
     }
 
@@ -127,10 +135,7 @@ public sealed class CustomerOrderService(PowergyDbContext db) : ICustomerOrderSe
     {
         ValidateDateRange(request.From, request.To);
         var status = request.Status?.Trim().ToLowerInvariant();
-        if (status is not null
-            && status is not CustomerOrderStatuses.Requested
-                and not CustomerOrderStatuses.Closed
-                and not CustomerOrderStatuses.Cancelled)
+        if (status is not null && !CustomerOrderStatuses.All.Contains(status))
         {
             throw new ApiValidationException("El estado del pedido no es válido.");
         }
@@ -195,14 +200,34 @@ public sealed class CustomerOrderService(PowergyDbContext db) : ICustomerOrderSe
             throw new ApiValidationException("El resultado de la solicitud no es válido.");
         }
 
+        var cancellationReason = CustomerOrderCancellationReasons.Normalize(
+            request.CancellationReason);
+        if (outcome == CustomerOrderStatuses.Cancelled
+            && !CustomerOrderCancellationReasons.IsValid(cancellationReason))
+        {
+            throw new ApiValidationException("Indica un motivo de cancelación válido.");
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+
+        // Bloqueo pesimista de la fila: serializa dos cierres simultáneos de la misma
+        // solicitud, de modo que solo el primero registra el historial.
+        await db.Database.ExecuteSqlRawAsync(
+            "SELECT 1 FROM customer_orders WHERE id = {0} FOR UPDATE",
+            [id],
+            cancellationToken);
+
         var order = await db.CustomerOrders
             .Include(item => item.Lines)
             .Include(item => item.StatusHistory)
             .FirstOrDefaultAsync(item => item.Id == id, cancellationToken)
             ?? throw new ApiNotFoundException("No se encontró la solicitud.");
 
-        if (order.Status is CustomerOrderStatuses.Closed or CustomerOrderStatuses.Cancelled)
+        if (CustomerOrderStatuses.IsFinal(order.Status))
         {
+            // Ya fue finalizada (por ejemplo, dos administradores a la vez):
+            // se devuelve el estado actual sin duplicar el historial.
+            await transaction.RollbackAsync(cancellationToken);
             return CustomerOrderMappings.ToResponse(order);
         }
 
@@ -211,18 +236,21 @@ public sealed class CustomerOrderService(PowergyDbContext db) : ICustomerOrderSe
             throw new ApiConflictException("La solicitud no se puede finalizar desde su estado actual.");
         }
 
+        var now = DateTime.UtcNow;
         if (request.Items is not null)
         {
-            ApplyFinalLines(order, request.Items);
+            ApplyFinalLines(order, request.Items, adminUserId, now);
         }
 
-        var now = DateTime.UtcNow;
         order.Status = outcome;
-
-        // closed_at/closed_by_admin_user_id representan la finalización de la
-        // solicitud, tanto si se cerró (vendida) como si se canceló.
         order.ClosedAt = now;
         order.ClosedByAdminUserId = adminUserId;
+        order.CancellationReason = outcome == CustomerOrderStatuses.Cancelled
+            ? cancellationReason
+            : null;
+        order.CancellationNote = outcome == CustomerOrderStatuses.Cancelled
+            ? NormalizeNote(request.CancellationNote)
+            : null;
 
         // Se agrega explícitamente al DbSet: al añadir una entidad con clave ya
         // asignada a la colección de una entidad rastreada, EF la marca como
@@ -238,15 +266,36 @@ public sealed class CustomerOrderService(PowergyDbContext db) : ICustomerOrderSe
         });
 
         await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        logger.LogInformation(
+            "Solicitud {Reference} finalizada como {Outcome} por el admin {AdminUserId}; "
+                + "motivo {Reason}; total {Total}.",
+            CustomerOrderMappings.Reference(order.Id),
+            outcome,
+            adminUserId,
+            cancellationReason ?? "-",
+            order.EstimatedTotalUsd);
+
+        if (outcome == CustomerOrderStatuses.Closed && CustomerOrderMappings.HasUnpricedItems(order))
+        {
+            logger.LogWarning(
+                "La solicitud {Reference} se cerró como vendida con productos sin precio definido.",
+                CustomerOrderMappings.Reference(order.Id));
+        }
 
         return CustomerOrderMappings.ToResponse(order);
     }
 
     /// <summary>
-    /// Reemplaza las líneas de la solicitud por el conjunto final indicado:
-    /// quita los productos ausentes, ajusta cantidades y recalcula el total.
+    /// Aplica el conjunto final de líneas: ajusta cantidades y precios negociados, y
+    /// marca como quitadas (sin borrar) las líneas que el cliente ya no lleva.
     /// </summary>
-    private void ApplyFinalLines(CustomerOrder order, IReadOnlyList<CustomerOrderLineRequest> items)
+    private static void ApplyFinalLines(
+        CustomerOrder order,
+        IReadOnlyList<CloseCustomerOrderLineRequest> items,
+        Guid adminUserId,
+        DateTime now)
     {
         var finales = items
             .Where(item => !string.IsNullOrWhiteSpace(item.ProductId))
@@ -254,7 +303,10 @@ public sealed class CustomerOrderService(PowergyDbContext db) : ICustomerOrderSe
             .Select(group => new
             {
                 ProductId = group.Key,
-                Quantity = group.Sum(item => item.Quantity)
+                Quantity = group.Sum(item => item.Quantity),
+                UnitPriceUsd = group
+                    .Select(item => item.UnitPriceUsd)
+                    .FirstOrDefault(price => price.HasValue)
             })
             .ToArray();
 
@@ -264,10 +316,10 @@ public sealed class CustomerOrderService(PowergyDbContext db) : ICustomerOrderSe
             throw new ApiValidationException("Las cantidades de la solicitud no son válidas.");
         }
 
-        var existentes = order.Lines
-            .Select(line => line.ProductId)
-            .ToHashSet(StringComparer.Ordinal);
-        if (finales.Any(item => !existentes.Contains(item.ProductId)))
+        var activas = order.Lines
+            .Where(line => line.RemovedAt is null)
+            .ToDictionary(line => line.ProductId, StringComparer.Ordinal);
+        if (finales.Any(item => !activas.ContainsKey(item.ProductId)))
         {
             throw new ApiValidationException(
                 "Solo se pueden quitar o ajustar productos ya presentes en la solicitud.");
@@ -275,27 +327,46 @@ public sealed class CustomerOrderService(PowergyDbContext db) : ICustomerOrderSe
 
         var cantidades = finales.ToDictionary(
             item => item.ProductId,
-            item => item.Quantity,
+            item => item,
             StringComparer.Ordinal);
-        foreach (var line in order.Lines.ToList())
+
+        foreach (var line in activas.Values)
         {
-            if (cantidades.TryGetValue(line.ProductId, out var quantity))
+            if (cantidades.TryGetValue(line.ProductId, out var final))
             {
-                line.Quantity = quantity;
+                line.Quantity = final.Quantity;
+                if (final.UnitPriceUsd is { } price)
+                {
+                    line.UnitPriceUsd = price;
+                }
             }
             else
             {
-                order.Lines.Remove(line);
-                db.CustomerOrderLines.Remove(line);
+                line.RemovedAt = now;
+                line.RemovedByAdminUserId = adminUserId;
             }
         }
 
-        var conservadas = order.Lines
-            .Where(line => cantidades.ContainsKey(line.ProductId))
-            .ToArray();
-        order.EstimatedTotalUsd = conservadas.All(line => line.UnitPriceUsd.HasValue)
-            ? conservadas.Sum(line => line.UnitPriceUsd!.Value * line.Quantity)
-            : null;
+        order.EstimatedTotalUsd = TotalEstimado(
+            order.Lines.Where(line => line.RemovedAt is null));
+    }
+
+    /// <summary>Devuelve el total solo cuando todas las líneas tienen precio definido.</summary>
+    private static decimal? TotalEstimado(IEnumerable<CustomerOrderLine> lines)
+    {
+        var lista = lines.ToArray();
+        if (lista.Length == 0 || lista.Any(line => line.UnitPriceUsd is null))
+        {
+            return null;
+        }
+
+        return lista.Sum(line => line.UnitPriceUsd!.Value * line.Quantity);
+    }
+
+    private static string? NormalizeNote(string? note)
+    {
+        var value = note?.Trim();
+        return string.IsNullOrEmpty(value) ? null : value;
     }
 
     public async Task<CustomerOrderMetricsResponse> GetMetricsAsync(
@@ -326,12 +397,16 @@ public sealed class CustomerOrderService(PowergyDbContext db) : ICustomerOrderSe
                 CancelledRequests = group.Sum(order =>
                     order.Status == CustomerOrderStatuses.Cancelled ? 1 : 0),
                 EstimatedValueUsd = group.Sum(order => order.EstimatedTotalUsd),
+                OriginalEstimatedValueUsd = group.Sum(order => order.OriginalEstimatedTotalUsd),
                 ClosedEstimatedValueUsd = group
                     .Where(order => order.Status == CustomerOrderStatuses.Closed)
                     .Sum(order => order.EstimatedTotalUsd),
                 CancelledEstimatedValueUsd = group
                     .Where(order => order.Status == CustomerOrderStatuses.Cancelled)
-                    .Sum(order => order.EstimatedTotalUsd)
+                    .Sum(order => order.EstimatedTotalUsd),
+                ClosedWithoutPriceRequests = group.Sum(order =>
+                    order.Status == CustomerOrderStatuses.Closed
+                        && order.EstimatedTotalUsd == null ? 1 : 0)
             })
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -352,8 +427,10 @@ public sealed class CustomerOrderService(PowergyDbContext db) : ICustomerOrderSe
             cancelledRequests,
             requests - closedRequests - cancelledRequests,
             totals?.EstimatedValueUsd,
+            totals?.OriginalEstimatedValueUsd,
             totals?.ClosedEstimatedValueUsd,
             totals?.CancelledEstimatedValueUsd,
+            totals?.ClosedWithoutPriceRequests ?? 0,
             requests == 0 ? null : (decimal)closedRequests / requests,
             closedDuringPeriod);
     }

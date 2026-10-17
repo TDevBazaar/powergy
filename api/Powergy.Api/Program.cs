@@ -1,5 +1,8 @@
+using System.IO.Compression;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.ResponseCompression;
+using Microsoft.AspNetCore.Server.IIS;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
@@ -7,6 +10,11 @@ using Powergy.Api.Auth;
 using Powergy.Api.Data;
 using Powergy.Api.Middleware;
 using Powergy.Api.Services;
+using Serilog;
+using Serilog.Events;
+
+// Los payloads reales de la API son de pocos kilobytes; 256 KB evita abusos de memoria.
+const long MaxRequestBodyBytes = 256 * 1024;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -62,10 +70,50 @@ if (builder.Environment.IsProduction())
     }
 }
 
+// Trazas estructuradas en consola y en archivos rotativos dentro de la aplicación.
+builder.Host.UseSerilog((context, services, configuration) => configuration
+    .ReadFrom.Services(services)
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .WriteTo.File(
+        Path.Combine(AppContext.BaseDirectory, "logs", "powergy-.log"),
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 7,
+        fileSizeLimitBytes: 10 * 1024 * 1024,
+        rollOnFileSizeLimit: true,
+        outputTemplate:
+            "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}"));
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = MaxRequestBodyBytes;
+});
+
+builder.Services.Configure<IISServerOptions>(options =>
+{
+    options.MaxRequestBodySize = MaxRequestBodyBytes;
+});
+
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
+builder.Services.AddHttpContextAccessor();
+
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<GzipCompressionProvider>();
+    options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(
+        ["application/json", "application/problem+json"]);
+});
+builder.Services.Configure<GzipCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest;
+});
 
 var audience = builder.Configuration["Supabase:Audience"] ?? "authenticated";
 
@@ -103,6 +151,8 @@ builder.Services.AddAuthorization(options =>
             .AddRequirements(new AdminRequirement()));
 });
 builder.Services.AddScoped<IAuthorizationHandler, AdminAuthorizationHandler>();
+builder.Services.AddScoped<ICurrentAdminAccessor, CurrentAdminAccessor>();
+builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<ICustomerOrderService, CustomerOrderService>();
@@ -124,6 +174,14 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+app.UseResponseCompression();
+app.UseSerilogRequestLogging(options =>
+{
+    options.GetLevel = (httpContext, _, _) =>
+        httpContext.Request.Path.StartsWithSegments("/health")
+            ? LogEventLevel.Verbose
+            : LogEventLevel.Information;
+});
 
 if (app.Environment.IsDevelopment())
 {
@@ -139,7 +197,12 @@ app.MapGet("/health", async (PowergyDbContext db, CancellationToken cancellation
 {
     var connected = await db.Database.CanConnectAsync(cancellationToken);
     return connected
-        ? Results.Ok(new { status = "ok", database = "connected" })
+        ? Results.Ok(new
+        {
+            status = "ok",
+            database = "connected",
+            version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown"
+        })
         : Results.Problem("No se pudo conectar con PostgreSQL.", statusCode: 503);
 });
 

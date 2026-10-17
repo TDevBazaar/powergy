@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Powergy.Api.Exceptions;
@@ -35,14 +36,21 @@ public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger)
             return false;
         }
 
-        logger.LogWarning(exception, "Request failed with HTTP {StatusCode}.", status);
+        var traceId = Activity.Current?.Id ?? httpContext.TraceIdentifier;
+        logger.LogWarning(
+            exception,
+            "Request failed with HTTP {StatusCode} (traceId {TraceId}).",
+            status,
+            traceId);
+
         httpContext.Response.StatusCode = status;
         await httpContext.Response.WriteAsJsonAsync(new ProblemDetails
         {
             Status = status,
             Title = title,
             Detail = detail,
-            Instance = httpContext.Request.Path
+            Instance = httpContext.Request.Path,
+            Extensions = { ["traceId"] = traceId }
         }, cancellationToken);
 
         return true;

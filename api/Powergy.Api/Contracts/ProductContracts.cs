@@ -8,9 +8,11 @@ namespace Powergy.Api.Contracts;
 public sealed record ProductQueryRequest
 {
     /// <summary>Optional category slug.</summary>
+    [StringLength(120)]
     public string? Category { get; init; }
 
     /// <summary>Optional text searched in product name, brand, model and specifications.</summary>
+    [StringLength(120)]
     public string? Q { get; init; }
 
     /// <summary>Optional sale status filter.</summary>
@@ -40,6 +42,9 @@ public sealed record CreateProductRequest
 
     /// <summary>Unique URL slug.</summary>
     [Required, StringLength(180, MinimumLength = 1)]
+    [RegularExpression(
+        "^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$",
+        ErrorMessage = "El slug solo admite letras, números y guiones simples.")]
     public required string Slug { get; init; }
 
     /// <summary>ID of an active category.</summary>
@@ -67,7 +72,7 @@ public sealed record CreateProductRequest
     public decimal? PriceUsd { get; init; }
 
     /// <summary>Product specifications shown in the catalog.</summary>
-    [Required]
+    [Required, StringLength(5000, MinimumLength = 1)]
     public required string Specifications { get; init; }
 
     /// <summary>Image path or URL.</summary>
@@ -96,6 +101,9 @@ public sealed record UpdateProductRequest
 {
     /// <summary>Unique URL slug.</summary>
     [Required, StringLength(180, MinimumLength = 1)]
+    [RegularExpression(
+        "^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$",
+        ErrorMessage = "El slug solo admite letras, números y guiones simples.")]
     public required string Slug { get; init; }
 
     /// <summary>ID of an active category.</summary>
@@ -123,7 +131,7 @@ public sealed record UpdateProductRequest
     public decimal? PriceUsd { get; init; }
 
     /// <summary>Product specifications shown in the catalog.</summary>
-    [Required]
+    [Required, StringLength(5000, MinimumLength = 1)]
     public required string Specifications { get; init; }
 
     /// <summary>Image path or URL.</summary>

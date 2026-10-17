@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Powergy.Api.Contracts;
+using Powergy.Api.Extensions;
 using Powergy.Api.Services;
 
 namespace Powergy.Api.Controllers;
@@ -18,6 +19,7 @@ public sealed class ProductsController(IProductService products) : ControllerBas
         [FromQuery] ProductQueryRequest request,
         CancellationToken cancellationToken)
     {
+        Response.SetPublicCatalogCache();
         var page = await products.GetPublicPageAsync(request, cancellationToken);
         return Ok(page);
     }
@@ -31,7 +33,13 @@ public sealed class ProductsController(IProductService products) : ControllerBas
         CancellationToken cancellationToken)
     {
         var product = await products.GetBySlugAsync(slug, cancellationToken);
-        return product is null ? NotFound() : Ok(product);
+        if (product is null)
+        {
+            return NotFound();
+        }
+
+        Response.SetPublicCatalogCache();
+        return Ok(product);
     }
 
     /// <summary>Returns a filtered page of products, including inactive records when requested.</summary>

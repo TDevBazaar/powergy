@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
 using Powergy.Api.Models;
 
 namespace Powergy.Api.Contracts;
@@ -28,12 +29,33 @@ public sealed record CloseCustomerOrderRequest
     public string Outcome { get; init; } = CustomerOrderStatuses.Closed;
 
     /// <summary>
-    /// Líneas finales a conservar (productId y cantidad). Si es <c>null</c> se
-    /// mantienen todas las líneas actuales. Solo se permite quitar productos o
-    /// ajustar cantidades de los ya solicitados, nunca agregar nuevos.
+    /// Líneas finales a conservar (productId, cantidad y precio final opcional). Si es
+    /// <c>null</c> se mantienen todas las líneas actuales. Solo se permite quitar
+    /// productos o ajustar cantidades y precios de los ya solicitados, nunca agregar.
     /// </summary>
     [MaxLength(20)]
-    public IReadOnlyList<CustomerOrderLineRequest>? Items { get; init; }
+    public IReadOnlyList<CloseCustomerOrderLineRequest>? Items { get; init; }
+
+    /// <summary>Motivo de cancelación, obligatorio cuando el resultado es "cancelled".</summary>
+    [StringLength(40)]
+    public string? CancellationReason { get; init; }
+
+    /// <summary>Detalle libre del motivo de cancelación.</summary>
+    [StringLength(500)]
+    public string? CancellationNote { get; init; }
+}
+
+public sealed record CloseCustomerOrderLineRequest
+{
+    [Required, StringLength(100, MinimumLength = 1)]
+    public required string ProductId { get; init; }
+
+    [Range(1, 99)]
+    public int Quantity { get; init; }
+
+    /// <summary>Precio unitario final fijado por el administrador, si se ajusta.</summary>
+    [Range(typeof(decimal), "0", "9999999999.99")]
+    public decimal? UnitPriceUsd { get; init; }
 }
 
 public sealed record CustomerOrderQueryRequest
@@ -61,8 +83,19 @@ public sealed record CustomerOrderLineResponse(
     string ProductSlug,
     string CategoryName,
     int Quantity,
+    int OriginalQuantity,
     decimal? UnitPriceUsd,
     decimal? LineTotalUsd);
+
+public sealed record CustomerOrderRemovedLineResponse(
+    string ProductId,
+    string ProductName,
+    string ProductSlug,
+    string CategoryName,
+    int Quantity,
+    int OriginalQuantity,
+    decimal? UnitPriceUsd,
+    DateTimeOffset? RemovedAt);
 
 public sealed record CustomerOrderHistoryResponse(
     string? PreviousStatus,
@@ -75,10 +108,15 @@ public sealed record CustomerOrderResponse(
     string Reference,
     string Status,
     decimal? EstimatedTotalUsd,
+    decimal? OriginalEstimatedTotalUsd,
     DateTimeOffset CreatedAt,
     DateTimeOffset? ClosedAt,
     Guid? ClosedByAdminUserId,
+    string? CancellationReason,
+    string? CancellationNote,
+    bool HasUnpricedItems,
     IReadOnlyList<CustomerOrderLineResponse> Items,
+    IReadOnlyList<CustomerOrderRemovedLineResponse> RemovedItems,
     IReadOnlyList<CustomerOrderHistoryResponse> History);
 
 public sealed record CustomerOrderListItemResponse(
@@ -86,10 +124,13 @@ public sealed record CustomerOrderListItemResponse(
     string Reference,
     string Status,
     decimal? EstimatedTotalUsd,
+    decimal? OriginalEstimatedTotalUsd,
     int ItemCount,
     DateTimeOffset CreatedAt,
     DateTimeOffset? ClosedAt,
     Guid? ClosedByAdminUserId,
+    string? CancellationReason,
+    bool HasUnpricedItems,
     IReadOnlyList<CustomerOrderLineResponse> Items);
 
 public sealed record CustomerOrderMetricsResponse(
@@ -100,32 +141,59 @@ public sealed record CustomerOrderMetricsResponse(
     int CancelledRequests,
     int OpenRequests,
     decimal? EstimatedValueUsd,
+    decimal? OriginalEstimatedValueUsd,
     decimal? ClosedEstimatedValueUsd,
     decimal? CancelledEstimatedValueUsd,
+    int ClosedWithoutPriceRequests,
     decimal? CloseRate,
     int ClosedDuringPeriod);
 
 public static class CustomerOrderMappings
 {
+    /// <summary>Un precio nulo, cero o negativo no cuenta como valor de venta.</summary>
+    public static bool IsUnpriced(decimal? priceUsd) => priceUsd is null or <= 0;
+
+    public static bool HasUnpricedItems(CustomerOrder order) =>
+        order.Lines.Any(line => line.RemovedAt is null && IsUnpriced(line.UnitPriceUsd));
+
     public static CustomerOrderLineResponse ToResponse(CustomerOrderLine line) => new(
         line.ProductId,
         line.ProductName,
         line.ProductSlug,
         line.CategoryName,
         line.Quantity,
+        line.OriginalQuantity,
         line.UnitPriceUsd,
         line.UnitPriceUsd * line.Quantity);
+
+    public static CustomerOrderRemovedLineResponse ToRemovedResponse(CustomerOrderLine line) => new(
+        line.ProductId,
+        line.ProductName,
+        line.ProductSlug,
+        line.CategoryName,
+        line.Quantity,
+        line.OriginalQuantity,
+        line.UnitPriceUsd,
+        line.RemovedAt is null ? null : Utc(line.RemovedAt.Value));
 
     public static CustomerOrderResponse ToResponse(CustomerOrder order) => new(
         order.Id,
         Reference(order.Id),
         order.Status,
         order.EstimatedTotalUsd,
+        order.OriginalEstimatedTotalUsd,
         Utc(order.CreatedAt),
         order.ClosedAt is null ? null : Utc(order.ClosedAt.Value),
         order.ClosedByAdminUserId,
-        order.Lines.OrderBy(line => line.ProductName)
+        order.CancellationReason,
+        order.CancellationNote,
+        HasUnpricedItems(order),
+        order.Lines.Where(line => line.RemovedAt is null)
+            .OrderBy(line => line.ProductName)
             .Select(ToResponse).ToArray(),
+        order.Lines.Where(line => line.RemovedAt is not null)
+            .OrderBy(line => line.RemovedAt)
+            .Select(ToRemovedResponse).ToArray(),
         order.StatusHistory.OrderBy(history => history.ChangedAt)
             .Select(history => new CustomerOrderHistoryResponse(
                 history.PreviousStatus,
@@ -133,17 +201,23 @@ public static class CustomerOrderMappings
                 history.ChangedByAdminUserId,
                 Utc(history.ChangedAt))).ToArray());
 
-    public static CustomerOrderListItemResponse ToListItem(CustomerOrder order) => new(
-        order.Id,
-        Reference(order.Id),
-        order.Status,
-        order.EstimatedTotalUsd,
-        order.Lines.Sum(line => line.Quantity),
-        Utc(order.CreatedAt),
-        order.ClosedAt is null ? null : Utc(order.ClosedAt.Value),
-        order.ClosedByAdminUserId,
-        order.Lines.OrderBy(line => line.ProductName)
-            .Select(ToResponse).ToArray());
+    public static CustomerOrderListItemResponse ToListItem(CustomerOrder order)
+    {
+        var activas = order.Lines.Where(line => line.RemovedAt is null).ToArray();
+        return new CustomerOrderListItemResponse(
+            order.Id,
+            Reference(order.Id),
+            order.Status,
+            order.EstimatedTotalUsd,
+            order.OriginalEstimatedTotalUsd,
+            activas.Sum(line => line.Quantity),
+            Utc(order.CreatedAt),
+            order.ClosedAt is null ? null : Utc(order.ClosedAt.Value),
+            order.ClosedByAdminUserId,
+            order.CancellationReason,
+            activas.Any(line => IsUnpriced(line.UnitPriceUsd)),
+            activas.OrderBy(line => line.ProductName).Select(ToResponse).ToArray());
+    }
 
     public static string Reference(Guid id) =>
         $"PG-{id.ToString("N")[..8].ToUpperInvariant()}";
@@ -151,3 +225,30 @@ public static class CustomerOrderMappings
     private static DateTimeOffset Utc(DateTime value) =>
         new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
 }
+
+/// <summary>Petición paginada del historial de auditoría administrativa.</summary>
+public sealed record AdminAuditLogQueryRequest
+{
+    [StringLength(40)]
+    public string? EntityType { get; init; }
+
+    [StringLength(100)]
+    public string? EntityId { get; init; }
+
+    [Range(1, 1_000_000)]
+    public int Page { get; init; } = 1;
+
+    [Range(1, 100)]
+    public int PageSize { get; init; } = 20;
+}
+
+/// <summary>Entrada de auditoría tal como la devuelve el API.</summary>
+public sealed record AdminAuditLogResponse(
+    Guid Id,
+    Guid? AdminUserId,
+    string? AdminEmail,
+    string EntityType,
+    string EntityId,
+    string Action,
+    JsonElement Changes,
+    DateTimeOffset CreatedAt);

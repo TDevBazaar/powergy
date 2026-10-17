@@ -13,6 +13,7 @@ public sealed class PowergyDbContext(DbContextOptions<PowergyDbContext> options)
     public DbSet<CustomerOrderLine> CustomerOrderLines => Set<CustomerOrderLine>();
     public DbSet<CustomerOrderStatusHistory> CustomerOrderStatusHistory =>
         Set<CustomerOrderStatusHistory>();
+    public DbSet<AdminAuditLog> AdminAuditLogs => Set<AdminAuditLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -131,11 +132,17 @@ public sealed class PowergyDbContext(DbContextOptions<PowergyDbContext> options)
                 .HasMaxLength(20).IsRequired();
             entity.Property(order => order.EstimatedTotalUsd)
                 .HasColumnName("estimated_total_usd").HasPrecision(12, 2);
+            entity.Property(order => order.OriginalEstimatedTotalUsd)
+                .HasColumnName("original_estimated_total_usd").HasPrecision(12, 2);
             entity.Property(order => order.CreatedAt)
                 .HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(order => order.ClosedAt).HasColumnName("closed_at");
             entity.Property(order => order.ClosedByAdminUserId)
                 .HasColumnName("closed_by_admin_user_id");
+            entity.Property(order => order.CancellationReason)
+                .HasColumnName("cancellation_reason").HasMaxLength(40);
+            entity.Property(order => order.CancellationNote)
+                .HasColumnName("cancellation_note").HasMaxLength(500);
             entity.HasIndex(order => new { order.Status, order.CreatedAt, order.Id });
             entity.HasIndex(order => new { order.CreatedAt, order.Id });
             entity.HasIndex(order => order.ClosedAt);
@@ -160,13 +167,46 @@ public sealed class PowergyDbContext(DbContextOptions<PowergyDbContext> options)
             entity.Property(line => line.CategoryName).HasColumnName("category_name")
                 .HasMaxLength(100).IsRequired();
             entity.Property(line => line.Quantity).HasColumnName("quantity");
+            entity.Property(line => line.OriginalQuantity).HasColumnName("original_quantity");
             entity.Property(line => line.UnitPriceUsd).HasColumnName("unit_price_usd")
                 .HasPrecision(12, 2);
+            entity.Property(line => line.RemovedAt).HasColumnName("removed_at");
+            entity.Property(line => line.RemovedByAdminUserId)
+                .HasColumnName("removed_by_admin_user_id");
             entity.HasIndex(line => line.OrderId);
+            entity.HasIndex(line => new { line.OrderId, line.RemovedAt });
             entity.HasOne(line => line.Order)
                 .WithMany(order => order.Lines)
                 .HasForeignKey(line => line.OrderId)
                 .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(line => line.RemovedByAdminUser)
+                .WithMany(admin => admin.RemovedOrderLines)
+                .HasForeignKey(line => line.RemovedByAdminUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<AdminAuditLog>(entity =>
+        {
+            entity.ToTable("admin_audit_log");
+            entity.HasKey(log => log.Id);
+            entity.Property(log => log.Id).HasColumnName("id");
+            entity.Property(log => log.AdminUserId).HasColumnName("admin_user_id");
+            entity.Property(log => log.EntityType).HasColumnName("entity_type")
+                .HasMaxLength(40).IsRequired();
+            entity.Property(log => log.EntityId).HasColumnName("entity_id")
+                .HasMaxLength(100).IsRequired();
+            entity.Property(log => log.Action).HasColumnName("action")
+                .HasMaxLength(20).IsRequired();
+            entity.Property(log => log.Changes).HasColumnName("changes")
+                .HasColumnType("jsonb").IsRequired();
+            entity.Property(log => log.CreatedAt)
+                .HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasIndex(log => new { log.EntityType, log.EntityId, log.CreatedAt });
+            entity.HasIndex(log => log.CreatedAt);
+            entity.HasOne(log => log.AdminUser)
+                .WithMany(admin => admin.AuditLogs)
+                .HasForeignKey(log => log.AdminUserId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<CustomerOrderStatusHistory>(entity =>

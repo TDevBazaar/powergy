@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Powergy.Api.Contracts;
+using Powergy.Api.Extensions;
 using Powergy.Api.Services;
 
 namespace Powergy.Api.Controllers;
@@ -17,6 +18,7 @@ public sealed class CategoriesController(ICategoryService categories) : Controll
     public async Task<ActionResult<IReadOnlyList<CategoryResponse>>> GetCategories(
         CancellationToken cancellationToken)
     {
+        Response.SetPublicCatalogCache();
         var result = await categories.GetAllAsync(
             includeInactive: false,
             cancellationToken);
@@ -32,7 +34,13 @@ public sealed class CategoriesController(ICategoryService categories) : Controll
         CancellationToken cancellationToken)
     {
         var category = await categories.GetByIdAsync(id, cancellationToken);
-        return category is null ? NotFound() : Ok(category);
+        if (category is null)
+        {
+            return NotFound();
+        }
+
+        Response.SetPublicCatalogCache();
+        return Ok(category);
     }
 
     /// <summary>Returns all categories for catalog administration.</summary>

@@ -1,9 +1,7 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using Powergy.Api.Auth;
 using Powergy.Api.Contracts;
-using Powergy.Api.Data;
 using Powergy.Api.Services;
 
 namespace Powergy.Api.Controllers;
@@ -15,7 +13,7 @@ namespace Powergy.Api.Controllers;
 [Produces("application/json")]
 public sealed class AdminCustomerOrdersController(
     ICustomerOrderService orders,
-    PowergyDbContext db) : ControllerBase
+    ICurrentAdminAccessor admins) : ControllerBase
 {
     /// <summary>Returns a filtered page of order requests.</summary>
     [HttpGet]
@@ -27,7 +25,7 @@ public sealed class AdminCustomerOrdersController(
         return Ok(await orders.GetPageAsync(request, cancellationToken));
     }
 
-    /// <summary>Returns request and closure counts for a period.</summary>
+    /// <summary>Returns request, closure and revenue counts for a period.</summary>
     [HttpGet("metrics")]
     [ProducesResponseType(typeof(CustomerOrderMetricsResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<CustomerOrderMetricsResponse>> GetMetrics(
@@ -49,7 +47,10 @@ public sealed class AdminCustomerOrdersController(
         return order is null ? NotFound() : Ok(order);
     }
 
-    /// <summary>Finaliza una solicitud (vendida o cancelada) y registra al administrador.</summary>
+    /// <summary>
+    /// Finaliza una solicitud (vendida o cancelada) registrando al administrador, el
+    /// motivo cuando se cancela y las líneas finales cuando cambian.
+    /// </summary>
     [HttpPost("{id:guid}/close")]
     [ProducesResponseType(typeof(CustomerOrderResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -59,19 +60,7 @@ public sealed class AdminCustomerOrdersController(
         [FromBody] CloseCustomerOrderRequest? request,
         CancellationToken cancellationToken)
     {
-        if (!Guid.TryParse(User.FindFirstValue("sub"), out var supabaseUserId))
-        {
-            return Unauthorized();
-        }
-
-        // El token identifica al administrador por su usuario de Supabase, pero
-        // closed_by_admin_user_id referencia admin_users.id, así que resolvemos
-        // la clave interna antes de cerrar la solicitud.
-        var adminUserId = await db.AdminUsers
-            .Where(admin => admin.SupabaseUserId == supabaseUserId && admin.IsActive)
-            .Select(admin => (Guid?)admin.Id)
-            .FirstOrDefaultAsync(cancellationToken);
-
+        var adminUserId = await admins.GetAdminUserIdAsync(cancellationToken);
         if (adminUserId is null)
         {
             return Unauthorized();

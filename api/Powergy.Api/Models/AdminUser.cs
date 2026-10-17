@@ -9,4 +9,7 @@ public sealed class AdminUser
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; }
     public ICollection<CustomerOrder> ClosedOrders { get; set; } = new List<CustomerOrder>();
+    public ICollection<CustomerOrderLine> RemovedOrderLines { get; set; } =
+        new List<CustomerOrderLine>();
+    public ICollection<AdminAuditLog> AuditLogs { get; set; } = new List<AdminAuditLog>();
 }
