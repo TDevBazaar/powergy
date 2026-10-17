@@ -4,15 +4,25 @@ ASP.NET Core 10 API with Entity Framework Core Code First and PostgreSQL on Supa
 
 ## Database tables
 
-- `categories`: catalog categories, URL slug, display order and active state.
-- `products`: catalog fields, nullable USD price, offer/service flags, image path, bestseller rank and active state.
+- `categories`: catalog categories, URL slug, display order, owning store and active state.
+- `products`: catalog fields, nullable USD price, offer/service flags, image path, bestseller rank, owning store and active state.
 - `admin_users`: allowlist of Supabase Auth user IDs authorized to administer the catalog.
-- `customer_orders`: catalog order requests recorded before the customer opens WhatsApp, with an idempotency key, status, estimated total, the original estimated total and closure metadata (acting administrator, cancellation reason and note).
+- `customer_orders`: catalog order requests recorded before the customer opens WhatsApp, with an idempotency key, owning store, status, estimated total, the original estimated total and closure metadata (acting administrator, cancellation reason and note).
 - `customer_order_lines`: snapshot of the requested products (name, slug, category, quantity and unit price) for each order. Lines removed while closing keep `original_quantity`, `removed_at` and `removed_by_admin_user_id` so the request history is never lost.
 - `customer_order_status_history`: append-only status transitions with the acting administrator and timestamp.
 - `admin_audit_log`: administrative audit trail for catalog and category changes, with the acting administrator, entity, action and a JSON diff of the changed fields.
 
 The existing JSON catalog has 85 products across three categories. The initial migration creates the schema and seeds the three categories; it does not import products yet. Product IDs are strings so the current IDs can be preserved during the catalog import. `top_ventas` is represented by a nullable `top_rank` (a rank means featured); the JSON's duplicate `ecoflow-delta-2-max` slug must be made unique before importing.
+
+## Multiple stores
+
+`categories`, `products` and `customer_orders` carry a `store` column so several storefronts can share one database. The default is `powergy`, so any request that does not mention a store keeps working against the original solar catalog without changes.
+
+- Reads accept `store` as a query parameter: `GET /api/products`, `GET /api/products/{slug}`, `GET /api/products/admin`, `GET /api/categories`, `GET /api/categories/{id}`, `GET /api/categories/admin`, `GET /api/admin/orders`, `GET /api/admin/orders/metrics` and `GET /api/admin/orders/{id}`.
+- Writes accept it in the body: `POST /api/products`, `PUT /api/products/{id}`, `POST /api/categories`, `PUT /api/categories/{id}` and `POST /api/orders`. `DELETE /api/products/{id}` and `DELETE /api/categories/{id}` take it as a query parameter.
+- Store keys are lowercase and 2 to 40 characters long (letters, numbers, `-` or `_`). Invalid keys are rejected with a validation error.
+- Products and categories are scoped to their store: a product update or deactivation only finds records of the same store, and a product must reference a category of its own store.
+- Slugs are unique per store (`unique (store, slug)`), so two stores can reuse the same slug.
 
 ## Local configuration
 
@@ -115,8 +125,8 @@ Product POST requests accept an optional `id`; this allows importing the existin
 ## Routes
 
 - `GET /api/categories` — active categories.
-- `GET /api/products` — active catalog, paginated; supports `category`, `q`, `onSale`, `featured`, `page` and `pageSize`.
-- `GET /api/products/{slug}` — active product.
+- `GET /api/products` — active catalog, paginated; supports `category`, `q`, `onSale`, `featured`, `store`, `page` and `pageSize`.
+- `GET /api/products/{slug}` — active product; supports `store`.
 - `GET /api/categories/admin` and `GET /api/products/admin` — admin catalog views.
 - `POST`, `PUT` and `DELETE` under `/api/categories` and `/api/products` — admin-only category/product management. DELETE deactivates rather than permanently removing records.
 - `POST /api/orders` — records an idempotent WhatsApp order request for the catalog cart.

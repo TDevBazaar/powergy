@@ -41,9 +41,10 @@ public sealed class AdminCustomerOrdersController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<CustomerOrderResponse>> GetOrder(
         Guid id,
+        [FromQuery] string? store,
         CancellationToken cancellationToken)
     {
-        var order = await orders.GetByIdAsync(id, cancellationToken);
+        var order = await orders.GetByIdAsync(id, store, cancellationToken);
         return order is null ? NotFound() : Ok(order);
     }
 
@@ -57,6 +58,7 @@ public sealed class AdminCustomerOrdersController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<CustomerOrderResponse>> CloseOrder(
         Guid id,
+        [FromQuery] string? store,
         [FromBody] CloseCustomerOrderRequest? request,
         CancellationToken cancellationToken)
     {
@@ -68,6 +70,7 @@ public sealed class AdminCustomerOrdersController(
 
         return Ok(await orders.CloseAsync(
             id,
+            store,
             adminUserId.Value,
             request ?? new CloseCustomerOrderRequest(),
             cancellationToken));

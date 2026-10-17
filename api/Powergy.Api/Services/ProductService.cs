@@ -21,9 +21,12 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
 
     public async Task<ProductResponse?> GetBySlugAsync(
         string slug,
+        string? store,
         CancellationToken cancellationToken)
     {
-        var specification = new ActiveProductBySlugSpecification(slug.Trim());
+        var specification = new ActiveProductBySlugSpecification(
+            slug.Trim(),
+            StoreKeys.Resolve(store));
         var product = await SpecificationEvaluator
             .GetQuery(db.Products.AsNoTracking(), specification)
             .FirstOrDefaultAsync(cancellationToken);
@@ -36,19 +39,23 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
         CancellationToken cancellationToken)
     {
         var slug = RequiredText(request.Slug, nameof(request.Slug));
+        var store = StoreKeys.Resolve(request.Store);
         var id = string.IsNullOrWhiteSpace(request.Id)
             ? $"PRD-{Guid.NewGuid():N}"
             : RequiredText(request.Id, nameof(request.Id));
 
         if (!await db.Categories.AnyAsync(
-                category => category.Id == request.CategoryId && category.IsActive,
+                category => category.Id == request.CategoryId
+                    && category.IsActive
+                    && category.Store == store,
                 cancellationToken))
         {
             throw new ApiValidationException("La categoría no existe o está inactiva.");
         }
 
         if (await db.Products.AnyAsync(
-                product => product.Slug == slug || product.Id == id,
+                product => product.Id == id
+                    || (product.Store == store && product.Slug == slug),
                 cancellationToken))
         {
             throw new ApiConflictException("El ID o slug ya está en uso.");
@@ -58,6 +65,7 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
         {
             Id = id,
             Slug = slug,
+            Store = store,
             CategoryId = request.CategoryId,
             Subcategory = RequiredText(request.Subcategory, nameof(request.Subcategory)),
             Brand = RequiredText(request.Brand, nameof(request.Brand)),
@@ -106,13 +114,18 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
         UpdateProductRequest request,
         CancellationToken cancellationToken)
     {
+        var store = StoreKeys.Resolve(request.Store);
         var product = await db.Products
             .Include(item => item.Category)
-            .FirstOrDefaultAsync(item => item.Id == id, cancellationToken)
+            .FirstOrDefaultAsync(
+                item => item.Id == id && item.Store == store,
+                cancellationToken)
             ?? throw new ApiNotFoundException("No se encontró el producto.");
 
         var category = await db.Categories.FirstOrDefaultAsync(
-            item => item.Id == request.CategoryId && item.IsActive,
+            item => item.Id == request.CategoryId
+                && item.IsActive
+                && item.Store == store,
             cancellationToken);
         if (category is null)
         {
@@ -121,7 +134,7 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
 
         var slug = RequiredText(request.Slug, nameof(request.Slug));
         if (await db.Products.AnyAsync(
-                item => item.Id != id && item.Slug == slug,
+                item => item.Id != id && item.Store == store && item.Slug == slug,
                 cancellationToken))
         {
             throw new ApiConflictException("El slug ya está en uso.");
@@ -192,10 +205,14 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
         return ProductResponse.From(product);
     }
 
-    public async Task DeactivateAsync(string id, CancellationToken cancellationToken)
+    public async Task DeactivateAsync(
+        string id,
+        string? store,
+        CancellationToken cancellationToken)
     {
+        var tienda = StoreKeys.Resolve(store);
         var product = await db.Products.FirstOrDefaultAsync(
-            item => item.Id == id,
+            item => item.Id == id && item.Store == tienda,
             cancellationToken)
             ?? throw new ApiNotFoundException("No se encontró el producto.");
 
@@ -221,7 +238,10 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
         bool admin,
         CancellationToken cancellationToken)
     {
-        var specification = new ProductCatalogSpecification(request, admin);
+        var specification = new ProductCatalogSpecification(
+            request,
+            admin,
+            StoreKeys.Resolve(request.Store));
         var filteredQuery = SpecificationEvaluator.GetQuery(
             db.Products.AsNoTracking(),
             specification);

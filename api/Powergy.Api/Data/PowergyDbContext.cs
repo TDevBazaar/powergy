@@ -26,9 +26,11 @@ public sealed class PowergyDbContext(DbContextOptions<PowergyDbContext> options)
                 .HasColumnName("name").HasMaxLength(100).IsRequired();
             entity.Property(category => category.Slug)
                 .HasColumnName("slug").HasMaxLength(120).IsRequired();
+            entity.Property(category => category.Store)
+                .HasColumnName("store").HasMaxLength(40).IsRequired();
             entity.Property(category => category.SortOrder).HasColumnName("sort_order");
             entity.Property(category => category.IsActive).HasColumnName("is_active");
-            entity.HasIndex(category => category.Slug).IsUnique();
+            entity.HasIndex(category => new { category.Store, category.Slug }).IsUnique();
             entity.Property(category => category.CreatedAt)
                 .HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(category => category.UpdatedAt)
@@ -70,7 +72,9 @@ public sealed class PowergyDbContext(DbContextOptions<PowergyDbContext> options)
             entity.Property(product => product.Id).HasColumnName("id").HasMaxLength(100);
             entity.Property(product => product.Slug)
                 .HasColumnName("slug").HasMaxLength(180).IsRequired();
-            entity.HasIndex(product => product.Slug).IsUnique();
+            entity.Property(product => product.Store)
+                .HasColumnName("store").HasMaxLength(40).IsRequired();
+            entity.HasIndex(product => new { product.Store, product.Slug }).IsUnique();
             entity.Property(product => product.CategoryId).HasColumnName("category_id");
             entity.Property(product => product.Subcategory)
                 .HasColumnName("subcategory").HasMaxLength(120).IsRequired();
@@ -100,9 +104,9 @@ public sealed class PowergyDbContext(DbContextOptions<PowergyDbContext> options)
                 .WithMany(category => category.Products)
                 .HasForeignKey(product => product.CategoryId)
                 .OnDelete(DeleteBehavior.Restrict);
-            entity.HasIndex(product => new { product.CategoryId, product.IsActive });
-            entity.HasIndex(product => new { product.IsActive, product.TopRank, product.Name, product.Id });
-            entity.HasIndex(product => new { product.TopRank, product.Name, product.Id });
+            entity.HasIndex(product => new { product.Store, product.CategoryId, product.IsActive });
+            entity.HasIndex(product => new { product.Store, product.IsActive, product.TopRank, product.Name, product.Id });
+            entity.HasIndex(product => new { product.Store, product.TopRank, product.Name, product.Id });
             entity.HasIndex(product => product.OnSale);
         });
 
@@ -128,6 +132,8 @@ public sealed class PowergyDbContext(DbContextOptions<PowergyDbContext> options)
             entity.Property(order => order.Id).HasColumnName("id");
             entity.Property(order => order.IdempotencyKey).HasColumnName("idempotency_key");
             entity.HasIndex(order => order.IdempotencyKey).IsUnique();
+            entity.Property(order => order.Store).HasColumnName("store")
+                .HasMaxLength(40).IsRequired();
             entity.Property(order => order.Status).HasColumnName("status")
                 .HasMaxLength(20).IsRequired();
             entity.Property(order => order.EstimatedTotalUsd)
@@ -143,9 +149,9 @@ public sealed class PowergyDbContext(DbContextOptions<PowergyDbContext> options)
                 .HasColumnName("cancellation_reason").HasMaxLength(40);
             entity.Property(order => order.CancellationNote)
                 .HasColumnName("cancellation_note").HasMaxLength(500);
-            entity.HasIndex(order => new { order.Status, order.CreatedAt, order.Id });
-            entity.HasIndex(order => new { order.CreatedAt, order.Id });
-            entity.HasIndex(order => order.ClosedAt);
+            entity.HasIndex(order => new { order.Store, order.Status, order.CreatedAt, order.Id });
+            entity.HasIndex(order => new { order.Store, order.CreatedAt, order.Id });
+            entity.HasIndex(order => new { order.Store, order.ClosedAt });
             entity.HasOne(order => order.ClosedByAdminUser)
                 .WithMany(admin => admin.ClosedOrders)
                 .HasForeignKey(order => order.ClosedByAdminUserId)

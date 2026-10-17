@@ -9,6 +9,10 @@ public sealed record CreateCustomerOrderRequest
     [Required]
     public Guid IdempotencyKey { get; init; }
 
+    /// <summary>Tienda que recibe la solicitud. Por defecto, POWERGY.</summary>
+    [StringLength(40, MinimumLength = 2)]
+    public string? Store { get; init; }
+
     [Required, MinLength(1), MaxLength(20)]
     public required IReadOnlyList<CustomerOrderLineRequest> Items { get; init; }
 }
@@ -60,6 +64,10 @@ public sealed record CloseCustomerOrderLineRequest
 
 public sealed record CustomerOrderQueryRequest
 {
+    /// <summary>Tienda a consultar. Por defecto, POWERGY.</summary>
+    [StringLength(40, MinimumLength = 2)]
+    public string? Store { get; init; }
+
     public string? Status { get; init; }
     public DateTimeOffset? From { get; init; }
     public DateTimeOffset? To { get; init; }
@@ -73,6 +81,10 @@ public sealed record CustomerOrderQueryRequest
 
 public sealed record CustomerOrderMetricsRequest
 {
+    /// <summary>Tienda a consultar. Por defecto, POWERGY.</summary>
+    [StringLength(40, MinimumLength = 2)]
+    public string? Store { get; init; }
+
     public DateTimeOffset? From { get; init; }
     public DateTimeOffset? To { get; init; }
 }
@@ -107,6 +119,7 @@ public sealed record CustomerOrderResponse(
     Guid Id,
     string Reference,
     string Status,
+    string Store,
     decimal? EstimatedTotalUsd,
     decimal? OriginalEstimatedTotalUsd,
     DateTimeOffset CreatedAt,
@@ -123,6 +136,7 @@ public sealed record CustomerOrderListItemResponse(
     Guid Id,
     string Reference,
     string Status,
+    string Store,
     decimal? EstimatedTotalUsd,
     decimal? OriginalEstimatedTotalUsd,
     int ItemCount,
@@ -187,6 +201,7 @@ public static class CustomerOrderMappings
         order.Id,
         Reference(order.Id),
         order.Status,
+        order.Store,
         order.EstimatedTotalUsd,
         order.OriginalEstimatedTotalUsd,
         Utc(order.CreatedAt),
@@ -215,6 +230,7 @@ public static class CustomerOrderMappings
             order.Id,
             Reference(order.Id),
             order.Status,
+            order.Store,
             order.EstimatedTotalUsd,
             order.OriginalEstimatedTotalUsd,
             activas.Sum(line => line.Quantity),

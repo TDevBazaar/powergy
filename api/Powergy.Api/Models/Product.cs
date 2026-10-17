@@ -4,6 +4,9 @@ public sealed class Product
 {
     public required string Id { get; set; }
     public required string Slug { get; set; }
+
+    /// <summary>Tienda a la que pertenece el producto.</summary>
+    public string Store { get; set; } = StoreKeys.Default;
     public Guid CategoryId { get; set; }
     public Category Category { get; set; } = null!;
     public required string Subcategory { get; set; }

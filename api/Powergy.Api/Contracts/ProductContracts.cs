@@ -11,6 +11,10 @@ public sealed record ProductQueryRequest
     [StringLength(120)]
     public string? Category { get; init; }
 
+    /// <summary>Tienda a consultar. Por defecto, el catálogo de POWERGY.</summary>
+    [StringLength(40, MinimumLength = 2)]
+    public string? Store { get; init; }
+
     /// <summary>Optional text searched in product name, brand, model and specifications.</summary>
     [StringLength(120)]
     public string? Q { get; init; }
@@ -50,6 +54,10 @@ public sealed record CreateProductRequest
     /// <summary>ID of an active category.</summary>
     [Required]
     public Guid CategoryId { get; init; }
+
+    /// <summary>Tienda propietaria del producto. Por defecto, POWERGY.</summary>
+    [StringLength(40, MinimumLength = 2)]
+    public string? Store { get; init; }
 
     /// <summary>Product subcategory.</summary>
     [Required, StringLength(120, MinimumLength = 1)]
@@ -109,6 +117,10 @@ public sealed record UpdateProductRequest
     /// <summary>ID of an active category.</summary>
     [Required]
     public Guid CategoryId { get; init; }
+
+    /// <summary>Tienda propietaria del producto. Por defecto, POWERGY.</summary>
+    [StringLength(40, MinimumLength = 2)]
+    public string? Store { get; init; }
 
     /// <summary>Product subcategory.</summary>
     [Required, StringLength(120, MinimumLength = 1)]
@@ -178,6 +190,7 @@ public sealed record ProductResponse(
     [property: JsonPropertyName("top_ventas")] bool TopVentas,
     [property: JsonPropertyName("top_rank")] int? TopRank,
     bool IsActive,
+    string Store,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt)
 {
@@ -201,6 +214,7 @@ public sealed record ProductResponse(
         product.TopRank.HasValue,
         product.TopRank,
         product.IsActive,
+        product.Store,
         new DateTimeOffset(DateTime.SpecifyKind(product.CreatedAt, DateTimeKind.Utc)),
         new DateTimeOffset(DateTime.SpecifyKind(product.UpdatedAt, DateTimeKind.Utc)));
 }

@@ -10,9 +10,13 @@ public sealed class CategoryService(PowergyDbContext db, IAuditLogService audit)
 {
     public async Task<IReadOnlyList<CategoryResponse>> GetAllAsync(
         bool includeInactive,
+        string? store,
         CancellationToken cancellationToken)
     {
-        var query = db.Categories.AsNoTracking().AsQueryable();
+        var tienda = StoreKeys.Resolve(store);
+        var query = db.Categories
+            .AsNoTracking()
+            .Where(category => category.Store == tienda);
         if (!includeInactive)
         {
             query = query.Where(category => category.IsActive);
@@ -29,12 +33,14 @@ public sealed class CategoryService(PowergyDbContext db, IAuditLogService audit)
 
     public async Task<CategoryResponse?> GetByIdAsync(
         Guid id,
+        string? store,
         CancellationToken cancellationToken)
     {
+        var tienda = StoreKeys.Resolve(store);
         var category = await db.Categories
             .AsNoTracking()
             .FirstOrDefaultAsync(
-                item => item.Id == id && item.IsActive,
+                item => item.Id == id && item.Store == tienda && item.IsActive,
                 cancellationToken);
 
         return category is null ? null : CategoryResponse.From(category);
@@ -45,8 +51,9 @@ public sealed class CategoryService(PowergyDbContext db, IAuditLogService audit)
         CancellationToken cancellationToken)
     {
         var slug = RequiredText(request.Slug, nameof(request.Slug));
+        var store = StoreKeys.Resolve(request.Store);
         if (await db.Categories.AnyAsync(
-                category => category.Slug == slug,
+                category => category.Store == store && category.Slug == slug,
                 cancellationToken))
         {
             throw new ApiConflictException("El slug ya está en uso.");
@@ -57,6 +64,7 @@ public sealed class CategoryService(PowergyDbContext db, IAuditLogService audit)
             Id = Guid.NewGuid(),
             Name = RequiredText(request.Name, nameof(request.Name)),
             Slug = slug,
+            Store = store,
             SortOrder = request.SortOrder
         };
 
@@ -70,6 +78,7 @@ public sealed class CategoryService(PowergyDbContext db, IAuditLogService audit)
             new AuditChangeSet()
                 .Add("name", null, category.Name)
                 .Add("slug", null, category.Slug)
+                .Add("store", null, category.Store)
                 .Add("sortOrder", null, category.SortOrder)
                 .Build(),
             cancellationToken);
@@ -82,14 +91,15 @@ public sealed class CategoryService(PowergyDbContext db, IAuditLogService audit)
         CategoryRequest request,
         CancellationToken cancellationToken)
     {
+        var store = StoreKeys.Resolve(request.Store);
         var category = await db.Categories.FirstOrDefaultAsync(
-            item => item.Id == id,
+            item => item.Id == id && item.Store == store,
             cancellationToken)
             ?? throw new ApiNotFoundException("No se encontró la categoría.");
 
         var slug = RequiredText(request.Slug, nameof(request.Slug));
         if (await db.Categories.AnyAsync(
-                item => item.Id != id && item.Slug == slug,
+                item => item.Id != id && item.Store == store && item.Slug == slug,
                 cancellationToken))
         {
             throw new ApiConflictException("El slug ya está en uso.");
@@ -118,10 +128,14 @@ public sealed class CategoryService(PowergyDbContext db, IAuditLogService audit)
         return CategoryResponse.From(category);
     }
 
-    public async Task DeactivateAsync(Guid id, CancellationToken cancellationToken)
+    public async Task DeactivateAsync(
+        Guid id,
+        string? store,
+        CancellationToken cancellationToken)
     {
+        var tienda = StoreKeys.Resolve(store);
         var category = await db.Categories.FirstOrDefaultAsync(
-            item => item.Id == id,
+            item => item.Id == id && item.Store == tienda,
             cancellationToken)
             ?? throw new ApiNotFoundException("No se encontró la categoría.");
 

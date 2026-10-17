@@ -146,6 +146,12 @@ namespace Powergy.Api.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("sort_order");
 
+                    b.Property<string>("Store")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("store");
+
                     b.Property<DateTime>("UpdatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -154,7 +160,7 @@ namespace Powergy.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Slug")
+                    b.HasIndex("Store", "Slug")
                         .IsUnique();
 
                     b.ToTable("categories", (string)null);
@@ -168,6 +174,7 @@ namespace Powergy.Api.Migrations
                             Name = "Estaciones de energía",
                             Slug = "estaciones-de-energia",
                             SortOrder = 1,
+                            Store = "powergy",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
@@ -178,6 +185,7 @@ namespace Powergy.Api.Migrations
                             Name = "Plantas eléctricas",
                             Slug = "plantas-electricas",
                             SortOrder = 2,
+                            Store = "powergy",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
                         new
@@ -188,6 +196,7 @@ namespace Powergy.Api.Migrations
                             Name = "Paneles solares",
                             Slug = "paneles-solares",
                             SortOrder = 3,
+                            Store = "powergy",
                             UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
                         });
                 });
@@ -243,18 +252,24 @@ namespace Powergy.Api.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("status");
 
-                    b.HasKey("Id");
+                    b.Property<string>("Store")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("store");
 
-                    b.HasIndex("ClosedAt");
+                    b.HasKey("Id");
 
                     b.HasIndex("ClosedByAdminUserId");
 
                     b.HasIndex("IdempotencyKey")
                         .IsUnique();
 
-                    b.HasIndex("CreatedAt", "Id");
+                    b.HasIndex("Store", "ClosedAt");
 
-                    b.HasIndex("Status", "CreatedAt", "Id");
+                    b.HasIndex("Store", "CreatedAt", "Id");
+
+                    b.HasIndex("Store", "Status", "CreatedAt", "Id");
 
                     b.ToTable("customer_orders", (string)null);
                 });
@@ -434,6 +449,12 @@ namespace Powergy.Api.Migrations
                         .HasColumnType("text")
                         .HasColumnName("specifications");
 
+                    b.Property<string>("Store")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("store");
+
                     b.Property<string>("Subcategory")
                         .IsRequired()
                         .HasMaxLength(120)
@@ -460,16 +481,18 @@ namespace Powergy.Api.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CategoryId");
+
                     b.HasIndex("OnSale");
 
-                    b.HasIndex("Slug")
+                    b.HasIndex("Store", "Slug")
                         .IsUnique();
 
-                    b.HasIndex("CategoryId", "IsActive");
+                    b.HasIndex("Store", "CategoryId", "IsActive");
 
-                    b.HasIndex("TopRank", "Name", "Id");
+                    b.HasIndex("Store", "TopRank", "Name", "Id");
 
-                    b.HasIndex("IsActive", "TopRank", "Name", "Id");
+                    b.HasIndex("Store", "IsActive", "TopRank", "Name", "Id");
 
                     b.ToTable("products", (string)null);
                 });

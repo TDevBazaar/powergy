@@ -14,6 +14,10 @@ public sealed record CategoryRequest
     [Required, StringLength(120, MinimumLength = 1)]
     public required string Slug { get; init; }
 
+    /// <summary>Tienda propietaria de la categoría. Por defecto, POWERGY.</summary>
+    [StringLength(40, MinimumLength = 2)]
+    public string? Store { get; init; }
+
     /// <summary>Position in category lists.</summary>
     [Range(0, 100000)]
     public int SortOrder { get; init; }
@@ -26,6 +30,7 @@ public sealed record CategoryResponse(
     string Slug,
     int SortOrder,
     bool IsActive,
+    string Store,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt)
 {
@@ -36,6 +41,7 @@ public sealed record CategoryResponse(
         category.Slug,
         category.SortOrder,
         category.IsActive,
+        category.Store,
         new DateTimeOffset(DateTime.SpecifyKind(category.CreatedAt, DateTimeKind.Utc)),
         new DateTimeOffset(DateTime.SpecifyKind(category.UpdatedAt, DateTimeKind.Utc)));
 }

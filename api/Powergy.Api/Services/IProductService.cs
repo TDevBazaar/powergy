@@ -10,6 +10,7 @@ public interface IProductService
 
     Task<ProductResponse?> GetBySlugAsync(
         string slug,
+        string? store,
         CancellationToken cancellationToken);
 
     Task<PagedResponse<ProductResponse>> GetAdminPageAsync(
@@ -25,5 +26,5 @@ public interface IProductService
         UpdateProductRequest request,
         CancellationToken cancellationToken);
 
-    Task DeactivateAsync(string id, CancellationToken cancellationToken);
+    Task DeactivateAsync(string id, string? store, CancellationToken cancellationToken);
 }

@@ -30,9 +30,10 @@ public sealed class ProductsController(IProductService products) : ControllerBas
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ProductResponse>> GetProduct(
         string slug,
+        [FromQuery] string? store,
         CancellationToken cancellationToken)
     {
-        var product = await products.GetBySlugAsync(slug, cancellationToken);
+        var product = await products.GetBySlugAsync(slug, store, cancellationToken);
         if (product is null)
         {
             return NotFound();
@@ -99,9 +100,10 @@ public sealed class ProductsController(IProductService products) : ControllerBas
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeactivateProduct(
         string id,
+        [FromQuery] string? store,
         CancellationToken cancellationToken)
     {
-        await products.DeactivateAsync(id, cancellationToken);
+        await products.DeactivateAsync(id, store, cancellationToken);
         return NoContent();
     }
 }

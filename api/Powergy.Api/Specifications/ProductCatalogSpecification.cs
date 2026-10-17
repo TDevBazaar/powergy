@@ -7,7 +7,7 @@ namespace Powergy.Api.Specifications;
 
 public sealed class ProductCatalogSpecification : Specification<Product>
 {
-    public ProductCatalogSpecification(ProductQueryRequest request, bool admin)
+    public ProductCatalogSpecification(ProductQueryRequest request, bool admin, string store)
     {
         AddInclude(product => product.Category);
 
@@ -15,7 +15,8 @@ public sealed class ProductCatalogSpecification : Specification<Product>
         var term = request.Q?.Trim();
 
         Criteria = product =>
-            (admin
+            product.Store == store
+            && (admin
                 ? request.IncludeInactive || product.IsActive
                 : product.IsActive && product.Category.IsActive)
             && (string.IsNullOrEmpty(category) || product.Category.Slug == category)
@@ -32,10 +33,13 @@ public sealed class ProductCatalogSpecification : Specification<Product>
 
 public sealed class ActiveProductBySlugSpecification : Specification<Product>
 {
-    public ActiveProductBySlugSpecification(string slug)
+    public ActiveProductBySlugSpecification(string slug, string store)
     {
         AddInclude(product => product.Category);
         Criteria = product =>
-            product.Slug == slug && product.IsActive && product.Category.IsActive;
+            product.Slug == slug
+            && product.Store == store
+            && product.IsActive
+            && product.Category.IsActive;
     }
 }

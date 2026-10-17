@@ -23,6 +23,8 @@ public sealed class CustomerOrderService(
             throw new ApiValidationException("La clave de solicitud no es válida.");
         }
 
+        var store = StoreKeys.Resolve(request.Store);
+
         var existing = await FindByIdempotencyKey(request.IdempotencyKey, cancellationToken);
         if (existing is not null)
         {
@@ -56,6 +58,7 @@ public sealed class CustomerOrderService(
             .AsNoTracking()
             .Include(product => product.Category)
             .Where(product => productIds.Contains(product.Id)
+                && product.Store == store
                 && product.IsActive
                 && product.Category.IsActive)
             .ToDictionaryAsync(product => product.Id, cancellationToken);
@@ -71,6 +74,7 @@ public sealed class CustomerOrderService(
         {
             Id = Guid.NewGuid(),
             IdempotencyKey = request.IdempotencyKey,
+            Store = store,
             Status = CustomerOrderStatuses.Requested,
             CreatedAt = now,
             Lines = items.Select(item =>
@@ -121,8 +125,9 @@ public sealed class CustomerOrderService(
         }
 
         logger.LogInformation(
-            "Solicitud {Reference} registrada con {ItemCount} producto(s) por {Total}.",
+            "Solicitud {Reference} de la tienda {Store} registrada con {ItemCount} producto(s) por {Total}.",
             CustomerOrderMappings.Reference(order.Id),
+            order.Store,
             order.Lines.Count,
             order.EstimatedTotalUsd);
 
@@ -140,7 +145,10 @@ public sealed class CustomerOrderService(
             throw new ApiValidationException("El estado del pedido no es válido.");
         }
 
-        var query = db.CustomerOrders.AsNoTracking();
+        var store = StoreKeys.Resolve(request.Store);
+        var query = db.CustomerOrders
+            .AsNoTracking()
+            .Where(order => order.Store == store);
         if (status is not null)
         {
             query = query.Where(order => order.Status == status);
@@ -177,23 +185,29 @@ public sealed class CustomerOrderService(
 
     public async Task<CustomerOrderResponse?> GetByIdAsync(
         Guid id,
+        string? store,
         CancellationToken cancellationToken)
     {
+        var tienda = StoreKeys.Resolve(store);
         var order = await db.CustomerOrders
             .AsNoTracking()
             .Include(item => item.Lines)
             .Include(item => item.StatusHistory)
-            .FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+            .FirstOrDefaultAsync(
+                item => item.Id == id && item.Store == tienda,
+                cancellationToken);
 
         return order is null ? null : CustomerOrderMappings.ToResponse(order);
     }
 
     public async Task<CustomerOrderResponse> CloseAsync(
         Guid id,
+        string? store,
         Guid adminUserId,
         CloseCustomerOrderRequest request,
         CancellationToken cancellationToken)
     {
+        var tienda = StoreKeys.Resolve(store);
         var outcome = request.Outcome?.Trim().ToLowerInvariant();
         if (outcome is not CustomerOrderStatuses.Closed and not CustomerOrderStatuses.Cancelled)
         {
@@ -220,7 +234,9 @@ public sealed class CustomerOrderService(
         var order = await db.CustomerOrders
             .Include(item => item.Lines)
             .Include(item => item.StatusHistory)
-            .FirstOrDefaultAsync(item => item.Id == id, cancellationToken)
+            .FirstOrDefaultAsync(
+                item => item.Id == id && item.Store == tienda,
+                cancellationToken)
             ?? throw new ApiNotFoundException("No se encontró la solicitud.");
 
         if (CustomerOrderStatuses.IsFinal(order.Status))
@@ -269,9 +285,10 @@ public sealed class CustomerOrderService(
         await transaction.CommitAsync(cancellationToken);
 
         logger.LogInformation(
-            "Solicitud {Reference} finalizada como {Outcome} por el admin {AdminUserId}; "
-                + "motivo {Reason}; total {Total}.",
+            "Solicitud {Reference} de la tienda {Store} finalizada como {Outcome} por el "
+                + "admin {AdminUserId}; motivo {Reason}; total {Total}.",
             CustomerOrderMappings.Reference(order.Id),
+            order.Store,
             outcome,
             adminUserId,
             cancellationReason ?? "-",
@@ -384,8 +401,11 @@ public sealed class CustomerOrderService(
 
         var fromUtc = from.UtcDateTime;
         var toUtc = to.UtcDateTime;
+        var store = StoreKeys.Resolve(request.Store);
         var inPeriod = db.CustomerOrders.AsNoTracking()
-            .Where(order => order.CreatedAt >= fromUtc && order.CreatedAt < toUtc);
+            .Where(order => order.Store == store
+                && order.CreatedAt >= fromUtc
+                && order.CreatedAt < toUtc);
 
         var totals = await inPeriod
             .GroupBy(_ => 1)
@@ -411,7 +431,8 @@ public sealed class CustomerOrderService(
             .FirstOrDefaultAsync(cancellationToken);
 
         var closedDuringPeriod = await db.CustomerOrders
-            .CountAsync(order => order.Status == CustomerOrderStatuses.Closed
+            .CountAsync(order => order.Store == store
+                && order.Status == CustomerOrderStatuses.Closed
                 && order.ClosedAt >= fromUtc
                 && order.ClosedAt < toUtc,
                 cancellationToken);

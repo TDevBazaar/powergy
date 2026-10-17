@@ -14,10 +14,12 @@ public interface ICustomerOrderService
 
     Task<CustomerOrderResponse?> GetByIdAsync(
         Guid id,
+        string? store,
         CancellationToken cancellationToken);
 
     Task<CustomerOrderResponse> CloseAsync(
         Guid id,
+        string? store,
         Guid adminUserId,
         CloseCustomerOrderRequest request,
         CancellationToken cancellationToken);

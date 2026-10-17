@@ -16,11 +16,13 @@ public sealed class CategoriesController(ICategoryService categories) : Controll
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<CategoryResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<CategoryResponse>>> GetCategories(
+        [FromQuery] string? store,
         CancellationToken cancellationToken)
     {
         Response.SetPublicCatalogCache();
         var result = await categories.GetAllAsync(
             includeInactive: false,
+            store,
             cancellationToken);
         return Ok(result);
     }
@@ -31,9 +33,10 @@ public sealed class CategoriesController(ICategoryService categories) : Controll
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<CategoryResponse>> GetCategory(
         Guid id,
+        [FromQuery] string? store,
         CancellationToken cancellationToken)
     {
-        var category = await categories.GetByIdAsync(id, cancellationToken);
+        var category = await categories.GetByIdAsync(id, store, cancellationToken);
         if (category is null)
         {
             return NotFound();
@@ -50,10 +53,12 @@ public sealed class CategoriesController(ICategoryService categories) : Controll
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<IReadOnlyList<CategoryResponse>>> GetAllCategories(
+        [FromQuery] string? store,
         CancellationToken cancellationToken)
     {
         var result = await categories.GetAllAsync(
             includeInactive: true,
+            store,
             cancellationToken);
         return Ok(result);
     }
@@ -101,9 +106,10 @@ public sealed class CategoriesController(ICategoryService categories) : Controll
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeactivateCategory(
         Guid id,
+        [FromQuery] string? store,
         CancellationToken cancellationToken)
     {
-        await categories.DeactivateAsync(id, cancellationToken);
+        await categories.DeactivateAsync(id, store, cancellationToken);
         return NoContent();
     }
 }

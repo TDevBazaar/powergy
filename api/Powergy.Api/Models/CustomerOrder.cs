@@ -4,6 +4,9 @@ public sealed class CustomerOrder
 {
     public Guid Id { get; set; }
     public Guid IdempotencyKey { get; set; }
+
+    /// <summary>Tienda en la que se registró la solicitud.</summary>
+    public string Store { get; set; } = StoreKeys.Default;
     public string Status { get; set; } = CustomerOrderStatuses.Requested;
     public decimal? EstimatedTotalUsd { get; set; }
 

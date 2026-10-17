@@ -6,10 +6,12 @@ public interface ICategoryService
 {
     Task<IReadOnlyList<CategoryResponse>> GetAllAsync(
         bool includeInactive,
+        string? store,
         CancellationToken cancellationToken);
 
     Task<CategoryResponse?> GetByIdAsync(
         Guid id,
+        string? store,
         CancellationToken cancellationToken);
 
     Task<CategoryResponse> CreateAsync(
@@ -21,5 +23,5 @@ public interface ICategoryService
         CategoryRequest request,
         CancellationToken cancellationToken);
 
-    Task DeactivateAsync(Guid id, CancellationToken cancellationToken);
+    Task DeactivateAsync(Guid id, string? store, CancellationToken cancellationToken);
 }
