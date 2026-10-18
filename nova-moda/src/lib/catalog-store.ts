@@ -1,22 +1,27 @@
 "use client";
 
 /* ── Catálogo real: se carga desde el API ───────────────────────
-   Un único estado compartido evita repetir la descarga en cada vista. */
+   Categorías y productos se solicitan por separado para que las
+   categorías (que son muy ligeras) se muestren de inmediato con sus
+   skeletons/templates correspondientes sin retrasar el renderizado. */
 
 import { useEffect } from "react";
 import { create } from "zustand";
 import {
-  fetchCatalog,
+  fetchStoreCategories,
+  fetchStoreProducts,
   type CategoryView,
   type ProductView,
 } from "./powergy-api";
 
-type Status = "idle" | "loading" | "ready" | "error";
+export type Status = "idle" | "loading" | "ready" | "error";
 
 interface CatalogState {
   products: ProductView[];
   categories: CategoryView[];
   status: Status;
+  categoriesStatus: Status;
+  productsStatus: Status;
   error: string | null;
   load: (force?: boolean) => void;
 }
@@ -25,25 +30,52 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
   products: [],
   categories: [],
   status: "idle",
+  categoriesStatus: "idle",
+  productsStatus: "idle",
   error: null,
 
   load: (force = false) => {
     const { status } = get();
     if (!force && status !== "idle" && status !== "error") return;
-    set({ status: "loading", error: null });
-    fetchCatalog()
-      .then(({ products, categories }) =>
-        set({ products, categories, status: "ready", error: null })
-      )
-      .catch((error: unknown) =>
+
+    set({
+      status: "loading",
+      categoriesStatus: "loading",
+      productsStatus: "loading",
+      error: null,
+    });
+
+    // 1. Cargar categorías de inmediato
+    fetchStoreCategories()
+      .then((categories) => {
+        set({ categories, categoriesStatus: "ready" });
+        const categoriesById = new Map(
+          categories.map((c) => [c.apiId, { slug: c.slug, name: c.name }])
+        );
+        // 2. Cargar productos con el mapa de categorías
+        return fetchStoreProducts(categoriesById);
+      })
+      .then((products) => {
         set({
+          products,
+          productsStatus: "ready",
+          status: "ready",
+          error: null,
+        });
+      })
+      .catch((error: unknown) => {
+        const errorMsg =
+          error instanceof Error
+            ? error.message
+            : "No se pudo cargar el catálogo.";
+        set((state) => ({
           status: "error",
-          error:
-            error instanceof Error
-              ? error.message
-              : "No se pudo cargar el catálogo.",
-        })
-      );
+          productsStatus: "error",
+          categoriesStatus:
+            state.categories.length > 0 ? "ready" : "error",
+          error: errorMsg,
+        }));
+      });
   },
 }));
 
@@ -74,11 +106,21 @@ export function useCatalogStatus(): Status {
   return useCatalogStore((state) => state.status);
 }
 
+export function useCategoriesStatus(): Status {
+  useEnsureCatalog();
+  return useCatalogStore((state) => state.categoriesStatus);
+}
+
+export function useProductsStatus(): Status {
+  useEnsureCatalog();
+  return useCatalogStore((state) => state.productsStatus);
+}
+
 export function useCatalogError(): string | null {
   return useCatalogStore((state) => state.error);
 }
 
-/** Vuelve a pedir el catálogo al API (por ejemplo tras editar en el panel) */
+/** Vuelve a pedir el catálogo al API */
 export function reloadCatalog(): void {
   useCatalogStore.getState().load(true);
 }

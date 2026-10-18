@@ -13,8 +13,6 @@ import {
   useCartLines,
 } from "@/lib/catalog";
 import {
-  FREE_SHIPPING_FROM,
-  STANDARD_SHIPPING_COST,
   formatPrice,
   formatPriceLabel,
 } from "@/lib/format";
@@ -29,10 +27,6 @@ export function CartView() {
 
   const subtotal = cartSubtotal(lines);
   const sinPrecio = hasUnpricedLines(lines);
-  const shipping =
-    subtotal >= FREE_SHIPPING_FROM || subtotal === 0 ? 0 : STANDARD_SHIPPING_COST;
-  const missing = Math.max(0, FREE_SHIPPING_FROM - subtotal);
-  const progress = Math.min(100, (subtotal / FREE_SHIPPING_FROM) * 100);
 
   if (lines.length === 0) {
     return (
@@ -157,21 +151,15 @@ export function CartView() {
           <div className="sticky top-28 rounded-[1.5rem] bg-card p-6 shadow-card">
             <h2 className="text-base font-semibold">Resumen del pedido</h2>
 
-            {/* Progreso envío gratis */}
+            {/* Info envío estándar */}
             <div className="mt-4 rounded-2xl bg-secondary/70 p-3.5">
-              <p className="flex items-center gap-1.5 text-xs font-medium">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
                 <Truck className="h-3.5 w-3.5 text-camel-deep" />
-                {missing > 0 ? (
-                  <>
-                    Te faltan{" "}
-                    <span className="font-bold">{formatPrice(missing)}</span>{" "}
-                    para el envío gratis
-                  </>
-                ) : (
-                  "¡Tienes envío estándar gratis!"
-                )}
+                Envío estándar
               </p>
-              <Progress value={progress} className="mt-2.5 h-1.5 bg-background" />
+              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                Para hoy mismo se le enviará una confirmación por WhatsApp con el precio del envío.
+              </p>
             </div>
 
             <div className="mt-5 space-y-2.5 text-sm">
@@ -180,15 +168,15 @@ export function CartView() {
                 <span className="font-medium">{formatPrice(subtotal)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Envío estándar</span>
-                <span className="font-medium">
-                  {shipping === 0 ? "Gratis" : formatPrice(shipping)}
+                <span className="text-muted-foreground">Envío</span>
+                <span className="text-xs font-medium text-camel-deep">
+                  Por confirmar por WhatsApp
                 </span>
               </div>
               <Separator className="bg-border" />
               <div className="flex justify-between text-base">
                 <span className="font-semibold">Total</span>
-                <span className="font-bold">{formatPrice(subtotal + shipping)}</span>
+                <span className="font-bold">{formatPrice(subtotal)}</span>
               </div>
             </div>
 

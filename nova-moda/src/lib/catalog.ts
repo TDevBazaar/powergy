@@ -19,6 +19,8 @@ export {
   useCategories,
   useCatalogError,
   useCatalogStatus,
+  useCategoriesStatus,
+  useProductsStatus,
   reloadCatalog,
 } from "./catalog-store";
 

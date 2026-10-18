@@ -22,12 +22,7 @@ export function formatDate(iso: string): string {
   });
 }
 
-/* ── Envío (demo) ────────────────────────────────────────────── */
-
-/** A partir de esta cantidad el envío estándar es gratis */
-export const FREE_SHIPPING_FROM = 75;
-export const STANDARD_SHIPPING_COST = 4.99;
-export const EXPRESS_SHIPPING_COST = 9.99;
+/* ── Envío ──────────────────────────────────────────────────────── */
 
 export const SHIPPING_OPTIONS: {
   id: ShippingMethod;
@@ -37,33 +32,15 @@ export const SHIPPING_OPTIONS: {
   {
     id: "estandar",
     label: "Envío estándar",
-    detail: "3 a 5 días laborables · Gratis a partir de $75",
-  },
-  {
-    id: "express",
-    label: "Envío express",
-    detail: "24 a 48 h en la puerta de tu casa",
-  },
-  {
-    id: "recogida",
-    label: "Recogida en tienda",
-    detail: "Retira tu pedido gratis cuando te venga bien",
+    detail:
+      "Para hoy mismo, se le enviará una confirmación por WhatsApp con el precio del envío",
   },
 ];
 
-/** Coste de envío para un subtotal y método concreto */
+/** Coste de envío: el precio se confirma por WhatsApp */
 export function shippingCostFor(
-  subtotal: number,
-  method: ShippingMethod
+  _subtotal: number,
+  _method: ShippingMethod = "estandar"
 ): number {
-  switch (method) {
-    case "estandar":
-      return subtotal >= FREE_SHIPPING_FROM ? 0 : STANDARD_SHIPPING_COST;
-    case "express":
-      return EXPRESS_SHIPPING_COST;
-    case "recogida":
-      return 0;
-    default:
-      return STANDARD_SHIPPING_COST;
-  }
+  return 0;
 }

@@ -38,11 +38,11 @@ export type ShippingMethod = "estandar" | "express" | "recogida";
 
 export interface OrderCustomer {
   name: string;
-  email: string;
+  email?: string;
   phone?: string;
   address: string;
-  city: string;
-  zip: string;
+  city?: string;
+  zip?: string;
   notes?: string;
   shipping: ShippingMethod;
 }

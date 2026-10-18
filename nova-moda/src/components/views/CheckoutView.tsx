@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -10,11 +10,11 @@ import {
   MessageCircle,
   PartyPopper,
   ShoppingBag,
+  Truck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { EmptyState } from "@/components/shop/EmptyState";
@@ -37,36 +37,28 @@ import {
   type ApiOrder,
 } from "@/lib/powergy-api";
 import { whatsappUrl } from "@/lib/whatsapp";
-import type { CartLine, Order, ShippingMethod } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import type { CartLine, Order } from "@/lib/types";
 
 const checkoutSchema = z.object({
-  name: z.string().min(3, "Escribe tu nombre completo"),
-  email: z.string().email("Correo no válido"),
+  name: z.string().min(2, "Escribe tu nombre completo"),
   phone: z
     .string()
-    .regex(/^[+\d][\d\s.-]{6,17}$/, "Teléfono no válido (opcional)")
-    .optional()
-    .or(z.literal("")),
-  address: z.string().min(5, "Escribe tu dirección completa"),
-  city: z.string().min(2, "Indica tu ciudad"),
-  zip: z.string().min(3, "Código postal no válido").max(10, "Código postal demasiado largo"),
+    .min(6, "Escribe tu número de teléfono")
+    .regex(/^[+\d][\d\s.-]{5,17}$/, "Número de teléfono no válido"),
+  address: z.string().min(4, "Escribe tu dirección de entrega"),
   notes: z.string().max(300, "Máximo 300 caracteres").optional().or(z.literal("")),
-  shipping: z.enum(["estandar", "express", "recogida"]),
 });
 
 type CheckoutValues = z.infer<typeof checkoutSchema>;
 
-/** Mensaje de WhatsApp con el detalle del pedido y la referencia del API */
+/** Mensaje de WhatsApp con el detalle del pedido y enlace directo para el admin */
 function buildWhatsAppMessage(
   reference: string,
   values: CheckoutValues,
   lines: CartLine[],
   subtotal: number,
-  shippingCost: number
+  adminUrl: string
 ): string {
-  const envio =
-    SHIPPING_OPTIONS.find((o) => o.id === values.shipping)?.label ?? values.shipping;
   const detalle = lines
     .map(
       (l) =>
@@ -79,20 +71,22 @@ function buildWhatsAppMessage(
   return [
     "Hola NOVA MODA, acabo de registrar un pedido en la tienda.",
     "",
-    `Pedido: ${reference}`,
-    `Nombre: ${values.name}`,
-    values.phone ? `Teléfono: ${values.phone}` : null,
-    `Correo: ${values.email}`,
-    `Entrega: ${values.address}, ${values.city}, ${values.zip}`,
-    `Envío: ${envio}`,
-    values.notes ? `Notas: ${values.notes}` : null,
+    `📋 Pedido: ${reference}`,
+    `👤 Nombre: ${values.name}`,
+    `📞 Teléfono: ${values.phone}`,
+    `📍 Dirección: ${values.address}`,
+    values.notes ? `📝 Notas: ${values.notes}` : null,
+    "🚚 Envío: Envío estándar (confirmación hoy mismo con el precio)",
     "",
     "Artículos:",
     detalle,
     "",
     `Subtotal: ${formatPrice(subtotal)}`,
-    `Envío: ${shippingCost === 0 ? "Gratis" : formatPrice(shippingCost)}`,
-    `Total: ${formatPrice(subtotal + shippingCost)}`,
+    "Envío: Por confirmar vía WhatsApp",
+    `Total productos: ${formatPrice(subtotal)}`,
+    "",
+    `🔗 Enlace directo al pedido (Admin):`,
+    adminUrl,
   ]
     .filter((line): line is string => line !== null)
     .join("\n");
@@ -108,21 +102,33 @@ export function CheckoutView() {
 
   const subtotal = cartSubtotal(lines);
   const sinPrecio = hasUnpricedLines(lines);
+  const shippingCost = shippingCostFor(subtotal, "estandar");
+  const total = subtotal + shippingCost;
 
   const {
     register,
     handleSubmit,
-    watch,
-    setValue,
     formState: { errors },
   } = useForm<CheckoutValues>({
     resolver: zodResolver(checkoutSchema),
-    defaultValues: { shipping: "estandar" },
+    defaultValues: {
+      name: "",
+      phone: "",
+      address: "",
+      notes: "",
+    },
   });
 
-  const shippingMethod = watch("shipping") as ShippingMethod;
-  const shippingCost = shippingCostFor(subtotal, shippingMethod ?? "estandar");
-  const total = subtotal + shippingCost;
+  // Redirigir automáticamente a WhatsApp en cuanto se confirma el pedido
+  useEffect(() => {
+    if (confirmed && whatsappLink) {
+      // Redirección directa para evitar bloqueos de ventanas emergentes (popups)
+      const timer = setTimeout(() => {
+        window.location.href = whatsappLink;
+      }, 400);
+      return () => clearTimeout(timer);
+    }
+  }, [confirmed, whatsappLink]);
 
   if (confirmed) {
     return (
@@ -137,7 +143,7 @@ export function CheckoutView() {
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
             Gracias, <span className="font-medium text-foreground">{confirmed.customer.name}</span>.
             Tu pedido <span className="font-mono font-semibold text-foreground">{confirmed.id}</span> quedó
-            registrado. Te esperamos en WhatsApp para confirmar el pago y la entrega.
+            registrado. Te estamos redirigiendo a WhatsApp para confirmar el pago y la entrega...
           </p>
           <div className="mt-6 rounded-2xl bg-secondary/70 p-4 text-left text-sm">
             <div className="flex justify-between">
@@ -147,9 +153,19 @@ export function CheckoutView() {
               </span>
             </div>
             <div className="mt-1.5 flex justify-between">
+              <span className="text-muted-foreground">Teléfono</span>
+              <span className="font-medium">{confirmed.customer.phone}</span>
+            </div>
+            <div className="mt-1.5 flex justify-between">
+              <span className="text-muted-foreground">Dirección</span>
+              <span className="max-w-[65%] truncate text-right font-medium">
+                {confirmed.customer.address}
+              </span>
+            </div>
+            <div className="mt-1.5 flex justify-between">
               <span className="text-muted-foreground">Envío</span>
-              <span className="font-medium">
-                {SHIPPING_OPTIONS.find((o) => o.id === confirmed.customer.shipping)?.label}
+              <span className="font-medium text-camel-deep">
+                Confirmación por WhatsApp
               </span>
             </div>
             <div className="mt-1.5 flex justify-between">
@@ -159,7 +175,7 @@ export function CheckoutView() {
           </div>
           <div className="mt-7 flex flex-col gap-2.5 sm:flex-row sm:justify-center">
             <Button asChild className="h-11 rounded-full px-6 text-sm font-medium">
-              <a href={whatsappLink || whatsappUrl("Hola NOVA MODA")} target="_blank" rel="noopener noreferrer">
+              <a href={whatsappLink || whatsappUrl("Hola NOVA MODA")}>
                 <MessageCircle className="mr-2 h-4 w-4" />
                 Continuar en WhatsApp
               </a>
@@ -174,11 +190,11 @@ export function CheckoutView() {
           </div>
           <button
             type="button"
-            onClick={() => navigate("/admin")}
+            onClick={() => navigate(`/admin?order=${encodeURIComponent(confirmed.id)}`)}
             className="mt-5 inline-flex items-center gap-1.5 text-[12px] text-muted-foreground transition hover:text-foreground"
           >
             <ClipboardList className="h-3.5 w-3.5" />
-            Ver el pedido en el panel de administración
+            Ver pedido #{confirmed.id} en el panel de administración
           </button>
         </div>
       </div>
@@ -215,6 +231,9 @@ export function CheckoutView() {
         },
       });
 
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const adminUrl = `${origin}/admin?order=${encodeURIComponent(respuesta.reference)}`;
+
       const order: Order = {
         id: respuesta.reference,
         items: lines.map((l) => ({ productId: l.productId, qty: l.qty })),
@@ -223,13 +242,10 @@ export function CheckoutView() {
         total,
         customer: {
           name: values.name,
-          email: values.email,
-          phone: values.phone || undefined,
+          phone: values.phone,
           address: values.address,
-          city: values.city,
-          zip: values.zip,
           notes: values.notes || undefined,
-          shipping: values.shipping,
+          shipping: "estandar",
         },
         status: respuesta.status,
         createdAt: respuesta.createdAt,
@@ -240,15 +256,21 @@ export function CheckoutView() {
         values,
         lines,
         subtotal,
-        shippingCost
+        adminUrl
       );
-      setWhatsappLink(whatsappUrl(mensaje));
-      // WhatsApp se abre siempre en una pestaña nueva
-      window.open(whatsappUrl(mensaje), "_blank", "noopener,noreferrer");
+      const urlWa = whatsappUrl(mensaje);
+      setWhatsappLink(urlWa);
 
       clearCart();
       setConfirmed(order);
       window.scrollTo({ top: 0 });
+
+      // Intento inmediato de apertura (y si el navegador bloquea el pop-up, el useEffect redirige automáticamente)
+      try {
+        window.location.href = urlWa;
+      } catch {
+        /* Redirección respaldada por useEffect */
+      }
     } catch (error) {
       setSendError(
         error instanceof Error
@@ -282,14 +304,14 @@ export function CheckoutView() {
         <div className="grid gap-8 lg:grid-cols-[1fr_380px]">
           {/* ── Columna izquierda: datos ── */}
           <div className="space-y-6">
-            {/* Datos personales */}
+            {/* Datos de entrega */}
             <section className="rounded-[1.5rem] bg-card p-6 shadow-card">
               <h2 className="flex items-center gap-2 text-base font-semibold">
                 <BadgeCheck className="h-4.5 w-4.5 text-camel-deep" />
-                Datos personales
+                Datos de entrega
               </h2>
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                <div className="sm:col-span-2">
+                <div>
                   <Label htmlFor="name">Nombre completo *</Label>
                   <Input
                     id="name"
@@ -300,68 +322,31 @@ export function CheckoutView() {
                   {fieldError(errors.name?.message)}
                 </div>
                 <div>
-                  <Label htmlFor="email">Correo electrónico *</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="ana@correo.com"
-                    className="mt-1.5 h-11 rounded-2xl border-input bg-background"
-                    {...register("email")}
-                  />
-                  {fieldError(errors.email?.message)}
-                </div>
-                <div>
-                  <Label htmlFor="phone">Teléfono (opcional)</Label>
+                  <Label htmlFor="phone">Número de teléfono *</Label>
                   <Input
                     id="phone"
+                    type="tel"
                     placeholder="+34 600 000 000"
                     className="mt-1.5 h-11 rounded-2xl border-input bg-background"
                     {...register("phone")}
                   />
                   {fieldError(errors.phone?.message)}
                 </div>
-              </div>
-            </section>
-
-            {/* Dirección */}
-            <section className="rounded-[1.5rem] bg-card p-6 shadow-card">
-              <h2 className="text-base font-semibold">Dirección de entrega</h2>
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 <div className="sm:col-span-2">
-                  <Label htmlFor="address">Dirección *</Label>
+                  <Label htmlFor="address">Dirección de entrega *</Label>
                   <Input
                     id="address"
-                    placeholder="Calle Ejemplo 12, 3º B"
+                    placeholder="Calle Principal 123, Apto 4B"
                     className="mt-1.5 h-11 rounded-2xl border-input bg-background"
                     {...register("address")}
                   />
                   {fieldError(errors.address?.message)}
                 </div>
-                <div>
-                  <Label htmlFor="city">Ciudad *</Label>
-                  <Input
-                    id="city"
-                    placeholder="Madrid"
-                    className="mt-1.5 h-11 rounded-2xl border-input bg-background"
-                    {...register("city")}
-                  />
-                  {fieldError(errors.city?.message)}
-                </div>
-                <div>
-                  <Label htmlFor="zip">Código postal *</Label>
-                  <Input
-                    id="zip"
-                    placeholder="28013"
-                    className="mt-1.5 h-11 rounded-2xl border-input bg-background"
-                    {...register("zip")}
-                  />
-                  {fieldError(errors.zip?.message)}
-                </div>
                 <div className="sm:col-span-2">
                   <Label htmlFor="notes">Notas para el repartidor (opcional)</Label>
                   <Textarea
                     id="notes"
-                    placeholder="Dejar en conserjería…"
+                    placeholder="Detalles de entrega, horario preferido o indicaciones de llegada…"
                     className="mt-1.5 min-h-20 rounded-2xl border-input bg-background"
                     {...register("notes")}
                   />
@@ -372,42 +357,28 @@ export function CheckoutView() {
 
             {/* Envío */}
             <section className="rounded-[1.5rem] bg-card p-6 shadow-card">
-              <h2 className="text-base font-semibold">Método de envío</h2>
-              <RadioGroup
-                value={shippingMethod ?? "estandar"}
-                onValueChange={(v) =>
-                  setValue("shipping", v as ShippingMethod, {
-                    shouldValidate: true,
-                  })
-                }
-                className="mt-4 gap-3"
-              >
-                {SHIPPING_OPTIONS.map((opt) => (
-                  <Label
-                    key={opt.id}
-                    htmlFor={`ship-${opt.id}`}
-                    className={cn(
-                      "flex cursor-pointer items-center gap-3 rounded-2xl border p-4 transition",
-                      shippingMethod === opt.id
-                        ? "border-camel bg-secondary/60"
-                        : "border-input bg-background hover:border-camel/50"
-                    )}
-                  >
-                    <RadioGroupItem value={opt.id} id={`ship-${opt.id}`} />
-                    <span className="flex-1">
-                      <span className="block text-sm font-medium">{opt.label}</span>
-                      <span className="mt-0.5 block text-xs text-muted-foreground">
-                        {opt.detail}
-                      </span>
+              <h2 className="flex items-center gap-2 text-base font-semibold">
+                <Truck className="h-4.5 w-4.5 text-camel-deep" />
+                Método de envío
+              </h2>
+              <div className="mt-4">
+                <div className="flex items-center gap-3 rounded-2xl border border-camel bg-secondary/60 p-4">
+                  <span className="flex h-4 w-4 items-center justify-center rounded-full border-2 border-camel">
+                    <span className="h-2 w-2 rounded-full bg-camel" />
+                  </span>
+                  <div className="flex-1">
+                    <span className="block text-sm font-semibold">
+                      {SHIPPING_OPTIONS[0]?.label ?? "Envío estándar"}
                     </span>
-                    <span className="text-sm font-semibold">
-                      {shippingCostFor(subtotal, opt.id) === 0
-                        ? "Gratis"
-                        : formatPrice(shippingCostFor(subtotal, opt.id))}
+                    <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                      Para hoy mismo se le enviará una confirmación por WhatsApp con el precio del envío
                     </span>
-                  </Label>
-                ))}
-              </RadioGroup>
+                  </div>
+                  <span className="text-right text-xs font-semibold text-camel-deep">
+                    Por confirmar
+                  </span>
+                </div>
+              </div>
             </section>
 
             {/* Pago */}
@@ -417,9 +388,8 @@ export function CheckoutView() {
                 Pago por WhatsApp
               </h2>
               <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
-                Coordinamos el pago en la conversación (transferencia, efectivo
-                contra entrega o el medio que acordemos). No compartas datos de
-                tarjeta por chat.
+                Coordinamos el pago directamente en la conversación (transferencia, efectivo
+                contra entrega o el medio que acordemos).
               </p>
             </section>
           </div>
@@ -465,14 +435,14 @@ export function CheckoutView() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Envío</span>
-                  <span className="font-medium">
-                    {shippingCost === 0 ? "Gratis" : formatPrice(shippingCost)}
+                  <span className="text-xs font-medium text-camel-deep">
+                    Por confirmar por WhatsApp
                   </span>
                 </div>
                 <Separator className="bg-border" />
                 <div className="flex justify-between text-base">
-                  <span className="font-semibold">Total</span>
-                  <span className="font-bold">{formatPrice(total)}</span>
+                  <span className="font-semibold">Total productos</span>
+                  <span className="font-bold">{formatPrice(subtotal)}</span>
                 </div>
               </div>
 

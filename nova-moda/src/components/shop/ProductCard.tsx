@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Heart, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
 import { href } from "@/lib/router";
@@ -24,6 +25,7 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product, className }: ProductCardProps) {
+  const [imgLoaded, setImgLoaded] = useState(false);
   const toggleFavorite = useNova((s) => s.toggleFavorite);
   const addToCart = useNova((s) => s.addToCart);
   const isFavorite = useNova((s) => s.favorites.includes(product.id));
@@ -48,12 +50,21 @@ export function ProductCard({ product, className }: ProductCardProps) {
         aria-label={`Ver ${product.name}`}
       >
         <div className="relative overflow-hidden rounded-[1.6rem] bg-secondary aspect-[3/4] shadow-card">
+          {!imgLoaded && (
+            <div className="absolute inset-0 animate-pulse bg-secondary/80 flex items-center justify-center">
+              <span className="h-6 w-6 rounded-full bg-muted-foreground/10" />
+            </div>
+          )}
           {product.image ? (
             <img
               src={product.image}
               alt={product.name}
               loading="lazy"
-              className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.06]"
+              onLoad={() => setImgLoaded(true)}
+              className={cn(
+                "h-full w-full object-cover transition-all duration-700 ease-out group-hover:scale-[1.06]",
+                imgLoaded ? "opacity-100 scale-100" : "opacity-0 scale-95"
+              )}
             />
           ) : null}
 

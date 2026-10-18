@@ -4,15 +4,19 @@ import { ArrowRight, Search, ShoppingBag, Sparkles, Truck, Undo2 } from "lucide-
 import { CategoryCard } from "@/components/shop/CategoryCard";
 import { ProductCard } from "@/components/shop/ProductCard";
 import { SectionTitle } from "@/components/shop/Bits";
+import { CategoryGridSkeleton, ProductGridSkeleton } from "@/components/shop/Skeletons";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { useCatalog, useCategories } from "@/lib/catalog";
+import { useCatalog, useCategories, useCategoriesStatus, useProductsStatus } from "@/lib/catalog";
 import { formatPriceLabel } from "@/lib/format";
 import { href, navigate } from "@/lib/router";
 
 export function HomeView() {
   const catalog = useCatalog();
   const categories = useCategories();
+  const categoriesStatus = useCategoriesStatus();
+  const productsStatus = useProductsStatus();
+
   const featured = catalog.filter((p) => p.featured).slice(0, 8);
   const news = [...catalog]
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
@@ -68,7 +72,7 @@ export function HomeView() {
             <div className="relative mx-auto aspect-[4/5] w-full max-w-md overflow-hidden rounded-[1.8rem] shadow-soft sm:aspect-[5/5]">
               <img
                 src="/images/products/30cae5992ef4.jpg"
-                alt="Editorial de moda NOVA MODA (imagen de archivo)"
+                alt="Editorial de moda NOVA MODA"
                 className="h-full w-full object-cover"
               />
             </div>
@@ -97,7 +101,7 @@ export function HomeView() {
         </div>
       </section>
 
-      {/* ── Categorías ───────────────────────────────────────── */}
+      {/* ── Categorías (Carga rápida independiente) ──────────── */}
       <section className="mt-14">
         <SectionTitle
           title="Categorías"
@@ -110,17 +114,20 @@ export function HomeView() {
             </a>
           }
         />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {categories.map((c) => (
-            <CategoryCard key={c.id} category={c} />
-          ))}
-        </div>
+        {categoriesStatus === "loading" && categories.length === 0 ? (
+          <CategoryGridSkeleton count={3} />
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {categories.map((c) => (
+              <CategoryCard key={c.id} category={c} />
+            ))}
+          </div>
+        )}
       </section>
 
-      {/* ── Lo más popular hoy (como en la referencia) ───────── */}
+      {/* ── Lo más popular hoy ───────────────────────────────── */}
       <section className="mt-14">
         <SectionTitle title="The most popular clothes today" />
-        {/* Buscador destacado, patrón de la referencia */}
         <button
           type="button"
           onClick={() => navigate("/buscar")}
@@ -131,27 +138,33 @@ export function HomeView() {
           Buscar sudadera, gabardina, bolso…
         </button>
 
-        <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-4">
-          {featured.map((p) => (
-            <ProductCard key={p.id} product={p} />
-          ))}
-        </div>
+        {productsStatus === "loading" && featured.length === 0 ? (
+          <ProductGridSkeleton count={8} />
+        ) : (
+          <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-4">
+            {featured.map((p) => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+        )}
       </section>
 
       {/* ── Novedades en scroll horizontal ───────────────────── */}
-      {news.length > 0 && (
-        <section className="mt-14">
-          <SectionTitle
-            title="Recién llegados"
-            action={
-              <a
-                href={href("/buscar?q=")}
-                className="inline-flex items-center gap-1 text-[13px] font-medium text-camel-deep hover:underline"
-              >
-                Ver novedades <ArrowRight className="h-3.5 w-3.5" />
-              </a>
-            }
-          />
+      <section className="mt-14">
+        <SectionTitle
+          title="Recién llegados"
+          action={
+            <a
+              href={href("/catalogo")}
+              className="inline-flex items-center gap-1 text-[13px] font-medium text-camel-deep hover:underline"
+            >
+              Ver novedades <ArrowRight className="h-3.5 w-3.5" />
+            </a>
+          }
+        />
+        {productsStatus === "loading" && news.length === 0 ? (
+          <ProductGridSkeleton count={4} columns="grid-cols-2 sm:grid-cols-4" />
+        ) : (
           <div className="no-scrollbar -mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
             {news.map((p) => (
               <div
@@ -162,21 +175,21 @@ export function HomeView() {
               </div>
             ))}
           </div>
-        </section>
-      )}
+        )}
+      </section>
 
       {/* ── Beneficios ───────────────────────────────────────── */}
       <section className="mt-14 grid gap-4 sm:grid-cols-3">
         {[
           {
             icon: Truck,
-            title: "Envío gratis desde $75",
-            text: "En pedidos superiores a $75,00 coordinados por WhatsApp.",
+            title: "Envío estándar para hoy mismo",
+            text: "Te confirmamos el costo exacto y entrega directamente por WhatsApp.",
           },
           {
             icon: Undo2,
-            title: "30 días para cambios",
-            text: "Escríbenos por WhatsApp y gestionamos el cambio contigo.",
+            title: "Atención personalizada",
+            text: "Escríbenos por WhatsApp y resolvemos todas tus dudas y pedidos.",
           },
           {
             icon: ShoppingBag,
@@ -201,20 +214,18 @@ export function HomeView() {
         ))}
       </section>
 
-      {/* ── Editorial duplicado ──────────────────────────────── */}
+      {/* ── Editorial ────────────────────────────────────────── */}
       <section className="mt-14 grid gap-4 md:grid-cols-2">
         {[
           {
             title: "Esenciales Mujer",
             to: "/categoria/mujer",
-            image:
-              "/images/products/730290d8138f.jpg",
+            image: "/images/products/730290d8138f.jpg",
           },
           {
             title: "Esenciales Hombre",
             to: "/categoria/hombre",
-            image:
-              "/images/products/b590d2b4f137.jpg",
+            image: "/images/products/b590d2b4f137.jpg",
           },
         ].map((block) => (
           <a
@@ -228,7 +239,7 @@ export function HomeView() {
               loading="lazy"
               className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-ink/65 via-ink/10 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
             <div className="relative flex w-full items-center justify-between p-6">
               <p className="text-lg font-semibold text-white">{block.title}</p>
               <span className="flex h-10 w-10 items-center justify-center rounded-full bg-background text-foreground transition group-hover:translate-x-1">

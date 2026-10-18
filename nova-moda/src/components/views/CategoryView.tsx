@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/shop/ProductCard";
+import { ProductGridSkeleton } from "@/components/shop/Skeletons";
 import { EmptyState } from "@/components/shop/EmptyState";
 import { FilterControls } from "@/components/shop/FilterControls";
 import { useFilterState } from "@/components/shop/useFilterState";
@@ -18,8 +19,9 @@ import {
   activeFilterCount,
   applyFilters,
   useCatalog,
-  useCatalogStatus,
   useCategories,
+  useCategoriesStatus,
+  useProductsStatus,
 } from "@/lib/catalog";
 import { categoryMedia } from "@/lib/category-media";
 import type { CategoryId } from "@/lib/types";
@@ -27,7 +29,9 @@ import type { CategoryId } from "@/lib/types";
 export function CategoryView({ categoryId }: { categoryId: CategoryId }) {
   const catalog = useCatalog();
   const categories = useCategories();
-  const status = useCatalogStatus();
+  const categoriesStatus = useCategoriesStatus();
+  const productsStatus = useProductsStatus();
+
   const category = categories.find((c) => c.slug === categoryId);
   const media = categoryMedia(categoryId);
 
@@ -42,21 +46,20 @@ export function CategoryView({ categoryId }: { categoryId: CategoryId }) {
   );
   const activeCount = activeFilterCount(filters);
 
-  /* Catálogo todavía en camino */
-  if (status !== "ready") {
+  /* Categorías todavía cargando */
+  if (categoriesStatus === "loading" && !category) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-        <EmptyState
-          icon={PackageSearch}
-          title="Cargando la colección…"
-          description="Estamos preparando los productos de esta categoría."
-        />
+      <div className="mx-auto max-w-6xl px-4 pb-16 pt-6 sm:px-6">
+        <div className="h-44 w-full animate-pulse rounded-[2rem] bg-secondary sm:h-60" />
+        <div className="mt-8">
+          <ProductGridSkeleton count={6} columns="grid-cols-2 sm:grid-cols-3 xl:grid-cols-4" />
+        </div>
       </div>
     );
   }
 
   /* Categoría inexistente o desactivada */
-  if (!category) {
+  if (categoriesStatus === "ready" && !category) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
         <EmptyState
@@ -77,18 +80,18 @@ export function CategoryView({ categoryId }: { categoryId: CategoryId }) {
         {media.banner && (
           <img
             src={media.banner}
-            alt={`Categoría ${category.name}`}
+            alt={`Categoría ${category?.name ?? ""}`}
             className="h-44 w-full object-cover sm:h-60"
           />
         )}
         {!media.banner && <div className="h-44 w-full sm:h-60" />}
-        <div className="absolute inset-0 bg-gradient-to-t from-ink/70 via-ink/25 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 p-6 sm:p-8">
           <p className="text-[10.5px] font-semibold uppercase tracking-[0.3em] text-white/75">
             CATEGORÍA
           </p>
           <h1 className="mt-1.5 text-3xl font-bold tracking-tight text-white sm:text-4xl">
-            {category.name}
+            {category?.name ?? "Categoría"}
           </h1>
           {media.description && (
             <p className="mt-2 max-w-lg text-[13px] leading-relaxed text-white/85">
@@ -98,10 +101,12 @@ export function CategoryView({ categoryId }: { categoryId: CategoryId }) {
         </div>
       </section>
 
-      {/* Móvil: filtros en hoja */}
-      <div className="mb-6 mt-6 flex items-center justify-between gap-3 lg:hidden">
+      {/* Móvil: hoja de filtros */}
+      <div className="mt-6 flex items-center justify-between gap-3 lg:hidden">
         <p className="text-sm text-muted-foreground">
-          {results.length} {results.length === 1 ? "producto" : "productos"}
+          {productsStatus === "loading"
+            ? "Cargando prendas…"
+            : `${results.length} ${results.length === 1 ? "producto" : "productos"}`}
         </p>
         <Sheet>
           <SheetTrigger asChild>
@@ -147,10 +152,16 @@ export function CategoryView({ categoryId }: { categoryId: CategoryId }) {
 
         <div>
           <p className="mb-5 hidden text-sm text-muted-foreground lg:block">
-            {results.length} {results.length === 1 ? "producto" : "productos"} en{" "}
-            {category.name}
+            {productsStatus === "loading"
+              ? "Cargando prendas…"
+              : `${results.length} ${results.length === 1 ? "producto" : "productos"} en ${
+                  category?.name ?? ""
+                }`}
           </p>
-          {results.length === 0 ? (
+
+          {productsStatus === "loading" && categoryProducts.length === 0 ? (
+            <ProductGridSkeleton count={6} columns="grid-cols-2 sm:grid-cols-3 xl:grid-cols-4" />
+          ) : results.length === 0 ? (
             <EmptyState
               icon={PackageSearch}
               title="Nada por aquí"

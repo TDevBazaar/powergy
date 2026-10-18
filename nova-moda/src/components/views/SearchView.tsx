@@ -11,15 +11,17 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/shop/ProductCard";
+import { ProductGridSkeleton } from "@/components/shop/Skeletons";
 import { EmptyState } from "@/components/shop/EmptyState";
 import { FilterControls } from "@/components/shop/FilterControls";
 import { useFilterState } from "@/components/shop/useFilterState";
-import { activeFilterCount, applyFilters, searchProducts, useCatalog, useCategories } from "@/lib/catalog";
+import { activeFilterCount, applyFilters, searchProducts, useCatalog, useCategories, useProductsStatus } from "@/lib/catalog";
 import { navigate } from "@/lib/router";
 
 export function SearchView({ initialQuery }: { initialQuery: string }) {
   const catalog = useCatalog();
   const categories = useCategories();
+  const productsStatus = useProductsStatus();
   const { filters, patch, reset } = useFilterState({ q: initialQuery });
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -165,7 +167,12 @@ export function SearchView({ initialQuery }: { initialQuery: string }) {
               <>{results.length} productos · escribe arriba para filtrar por texto</>
             )}
           </p>
-          {results.length === 0 ? (
+          {productsStatus === "loading" && catalog.length === 0 ? (
+            <ProductGridSkeleton
+              count={8}
+              columns="grid-cols-2 sm:grid-cols-3 xl:grid-cols-4"
+            />
+          ) : results.length === 0 ? (
             <EmptyState
               icon={PackageSearch}
               title={hasQuery ? `Sin resultados para “${filters.q}”` : "Nada encontrado"}

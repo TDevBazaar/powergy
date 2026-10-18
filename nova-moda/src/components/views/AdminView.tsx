@@ -58,6 +58,7 @@ import {
 } from "@/lib/admin-api";
 import { STORAGE_BUCKET, getSupabaseClient } from "@/lib/supabase";
 import { reloadCatalog } from "@/lib/catalog";
+import { useRoute } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -133,7 +134,15 @@ export function AdminView() {
   const [loginError, setLoginError] = useState("");
   const [saving, setSaving] = useState(false);
 
+  const route = useRoute();
+  const targetOrder = route.query.get("order");
+
   /* ── Datos ──────────────────────────────────────────────────── */
+  const [activeTab, setActiveTab] = useState(targetOrder ? "pedidos" : "productos");
+  const [loadingProductId, setLoadingProductId] = useState<string | null>(null);
+  const [loadingCategoryId, setLoadingCategoryId] = useState<string | null>(null);
+  const [loadingOrderId, setLoadingOrderId] = useState<string | null>(null);
+
   const [products, setProducts] = useState<ApiProduct[]>([]);
   const [categories, setCategories] = useState<ApiCategory[]>([]);
   const [orders, setOrders] = useState<AdminOrderListItem[]>([]);
@@ -240,6 +249,25 @@ export function AdminView() {
   useEffect(() => {
     if (token) void recargar();
   }, [token, recargar]);
+
+  useEffect(() => {
+    if (targetOrder) {
+      setActiveTab("pedidos");
+    }
+  }, [targetOrder]);
+
+  useEffect(() => {
+    if (targetOrder && orders.length > 0 && !solicitud && token && !cargandoDetalle) {
+      const found = orders.find(
+        (o) =>
+          o.reference.toLowerCase() === targetOrder.toLowerCase() ||
+          o.id.toLowerCase() === targetOrder.toLowerCase()
+      );
+      if (found) {
+        void abrirSolicitud(found);
+      }
+    }
+  }, [targetOrder, orders, solicitud, token, cargandoDetalle]);
 
   useEffect(() => {
     if (!modalProducto) {
@@ -362,11 +390,12 @@ export function AdminView() {
   };
 
   const alternarProducto = async (producto: ApiProduct) => {
-    if (!token) return;
+    if (!token || loadingProductId) return;
+    setLoadingProductId(producto.id);
     try {
       if (producto.isActive) {
         await deactivateProduct(token, producto.id);
-        toast.info(`“${producto.name}” oculto en la tienda`);
+        toast.info(`“${producto.name}” oculto de la tienda`);
       } else {
         await updateProduct(token, producto.id, {
           id: producto.id,
@@ -389,8 +418,11 @@ export function AdminView() {
         toast.success(`“${producto.name}” visible otra vez`);
       }
       await recargar();
+      reloadCatalog();
     } catch (error) {
       toast.error(mensajeError(error));
+    } finally {
+      setLoadingProductId(null);
     }
   };
 
@@ -464,7 +496,8 @@ export function AdminView() {
   };
 
   const alternarCategoria = async (categoria: ApiCategory) => {
-    if (!token) return;
+    if (!token || loadingCategoryId) return;
+    setLoadingCategoryId(categoria.id);
     try {
       if (categoria.isActive) {
         await deactivateCategory(token, categoria.id);
@@ -478,14 +511,18 @@ export function AdminView() {
         toast.success(`Categoría “${categoria.name}” activada`);
       }
       await recargar();
+      reloadCatalog();
     } catch (error) {
       toast.error(mensajeError(error));
+    } finally {
+      setLoadingCategoryId(null);
     }
   };
 
   /* ── Solicitudes ────────────────────────────────────────────── */
   const abrirSolicitud = async (item: AdminOrderListItem) => {
     if (!token) return;
+    setLoadingOrderId(item.id);
     setSolicitud(item);
     setDetalle(null);
     setItemsEdicion([]);
@@ -512,6 +549,7 @@ export function AdminView() {
       setSolicitud(null);
     } finally {
       setCargandoDetalle(false);
+      setLoadingOrderId(null);
     }
   };
 
@@ -752,7 +790,7 @@ export function AdminView() {
       </p>
 
       {/* Pestañas */}
-      <Tabs defaultValue="productos" className="mt-8">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-8">
         <TabsList className="h-11 rounded-full bg-secondary p-1">
           <TabsTrigger
             value="productos"
@@ -838,6 +876,7 @@ export function AdminView() {
                     </td>
                     <td className="px-4 py-3">
                       <Switch
+                        disabled={loadingProductId === p.id}
                         checked={p.isActive}
                         onCheckedChange={() => void alternarProducto(p)}
                         aria-label={
@@ -858,11 +897,16 @@ export function AdminView() {
                         <Button
                           variant="outline"
                           size="sm"
+                          disabled={loadingProductId === p.id}
                           onClick={() => void alternarProducto(p)}
-                          className="h-9 rounded-full border-input bg-card px-3 text-muted-foreground"
+                          className="h-9 rounded-full border-input bg-card px-3 text-muted-foreground transition"
                           aria-label={p.isActive ? `Ocultar ${p.name}` : `Mostrar ${p.name}`}
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          {loadingProductId === p.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-camel-deep" />
+                          ) : (
+                            <Trash2 className="h-3.5 w-3.5" />
+                          )}
                         </Button>
                       </div>
                     </td>
@@ -898,7 +942,7 @@ export function AdminView() {
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">
                     {p.category} · {formatPriceLabel(p.price_usd ?? 0)}
                   </p>
-                  <div className="mt-2 flex items-center gap-2">
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
                     <Button
                       variant="outline"
                       size="sm"
@@ -908,7 +952,22 @@ export function AdminView() {
                       <Pencil className="mr-1 h-3.5 w-3.5" />
                       Editar
                     </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={loadingProductId === p.id}
+                      onClick={() => void alternarProducto(p)}
+                      className="h-9 rounded-full border-input bg-card px-3 text-[12px] text-muted-foreground"
+                    >
+                      {loadingProductId === p.id ? (
+                        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin text-camel-deep" />
+                      ) : (
+                        <Trash2 className="mr-1 h-3.5 w-3.5" />
+                      )}
+                      {p.isActive ? "Ocultar" : "Mostrar"}
+                    </Button>
                     <Switch
+                      disabled={loadingProductId === p.id}
                       checked={p.isActive}
                       onCheckedChange={() => void alternarProducto(p)}
                       aria-label={
@@ -965,6 +1024,7 @@ export function AdminView() {
                     </td>
                     <td className="px-4 py-3.5">
                       <Switch
+                        disabled={loadingCategoryId === c.id}
                         checked={c.isActive}
                         onCheckedChange={() => void alternarCategoria(c)}
                         aria-label={
@@ -975,7 +1035,7 @@ export function AdminView() {
                       />
                     </td>
                     <td className="px-4 py-3.5">
-                      <div className="flex justify-end">
+                      <div className="flex justify-end gap-1.5">
                         <Button
                           variant="outline"
                           size="sm"
@@ -990,6 +1050,20 @@ export function AdminView() {
                           className="h-9 rounded-full border-input bg-card px-3"
                         >
                           <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={loadingCategoryId === c.id}
+                          onClick={() => void alternarCategoria(c)}
+                          className="h-9 rounded-full border-input bg-card px-3 text-muted-foreground transition"
+                          aria-label={c.isActive ? `Desactivar ${c.name}` : `Activar ${c.name}`}
+                        >
+                          {loadingCategoryId === c.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-camel-deep" />
+                          ) : (
+                            <Trash2 className="h-3.5 w-3.5" />
+                          )}
                         </Button>
                       </div>
                     </td>
@@ -1055,9 +1129,13 @@ export function AdminView() {
                       <Button
                         variant="outline"
                         size="sm"
+                        disabled={loadingOrderId === o.id}
                         onClick={() => void abrirSolicitud(o)}
                         className="h-9 rounded-full border-input bg-card px-4 text-[12px]"
                       >
+                        {loadingOrderId === o.id ? (
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin text-camel-deep" />
+                        ) : null}
                         Ver
                       </Button>
                     </td>

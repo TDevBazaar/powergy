@@ -19,7 +19,7 @@ import { ProductCard } from "@/components/shop/ProductCard";
 import { QuantityStepper } from "@/components/shop/QuantityStepper";
 import { SectionTitle } from "@/components/shop/Bits";
 import { EmptyState } from "@/components/shop/EmptyState";
-import { useCatalog, productById } from "@/lib/catalog";
+import { useCatalog, useProductsStatus, productById } from "@/lib/catalog";
 import { categoryMedia } from "@/lib/category-media";
 import { formatPriceLabel } from "@/lib/format";
 import { href, navigate } from "@/lib/router";
@@ -29,6 +29,7 @@ import { toast } from "sonner";
 
 export function ProductDetailView({ productId }: { productId: string }) {
   const catalog = useCatalog();
+  const productsStatus = useProductsStatus();
   const product = productById(catalog, productId);
 
   const [qty, setQty] = useState(1);
@@ -47,6 +48,24 @@ export function ProductDetailView({ productId }: { productId: string }) {
         : [],
     [catalog, product]
   );
+
+  if (productsStatus === "loading" && !product) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 pb-16 pt-6 sm:px-6 animate-pulse">
+        <div className="h-10 w-24 rounded-full bg-secondary mb-6" />
+        <div className="grid gap-10 lg:grid-cols-2">
+          <div className="aspect-[4/5] w-full rounded-[2rem] bg-secondary shadow-card" />
+          <div className="space-y-4 pt-2">
+            <div className="h-4 w-28 rounded-md bg-secondary" />
+            <div className="h-8 w-3/4 rounded-md bg-secondary" />
+            <div className="h-6 w-32 rounded-md bg-secondary/80" />
+            <div className="h-20 w-full rounded-2xl bg-secondary/50 pt-4" />
+            <div className="h-12 w-full rounded-full bg-secondary" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!product) {
     return (

@@ -247,21 +247,20 @@ export async function apiSend<T>(
   return (await response.json()) as T;
 }
 
-/** Catálogo completo (hasta 5 páginas de 100) */
-export async function fetchCatalog(): Promise<{
-  products: ProductView[];
-  categories: CategoryView[];
-}> {
-  const categories = (await apiGet<ApiCategory[]>(
-    "categories?store=" + encodeURIComponent(NOVA_STORE)
-  )).map(mapCategory);
-  const categoriesById = new Map(
-    categories.map((category) => [
-      category.apiId,
-      { slug: category.slug, name: category.name },
-    ])
-  );
+/** Categorías de la tienda (rápido, solo 1 petición) */
+export async function fetchStoreCategories(): Promise<CategoryView[]> {
+  const categories = (
+    await apiGet<ApiCategory[]>(
+      "categories?store=" + encodeURIComponent(NOVA_STORE)
+    )
+  ).map(mapCategory);
+  return categories;
+}
 
+/** Productos de la tienda (hasta 5 páginas) */
+export async function fetchStoreProducts(
+  categoriesById: Map<string, { slug: string; name: string }> = new Map()
+): Promise<ProductView[]> {
   const products: ProductView[] = [];
   for (let page = 1; page <= 5; page += 1) {
     const result = await apiGet<ApiPage<ApiProduct>>(
@@ -272,6 +271,21 @@ export async function fetchCatalog(): Promise<{
     );
     if (page >= result.totalPages || result.items.length === 0) break;
   }
+  return products;
+}
 
+/** Catálogo completo */
+export async function fetchCatalog(): Promise<{
+  products: ProductView[];
+  categories: CategoryView[];
+}> {
+  const categories = await fetchStoreCategories();
+  const categoriesById = new Map(
+    categories.map((category) => [
+      category.apiId,
+      { slug: category.slug, name: category.name },
+    ])
+  );
+  const products = await fetchStoreProducts(categoriesById);
   return { products, categories };
 }

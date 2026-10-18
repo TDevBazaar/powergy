@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/shop/ProductCard";
+import { ProductGridSkeleton } from "@/components/shop/Skeletons";
 import { EmptyState } from "@/components/shop/EmptyState";
 import { FilterControls } from "@/components/shop/FilterControls";
 import { useFilterState } from "@/components/shop/useFilterState";
@@ -19,7 +20,7 @@ import {
   applyFilters,
   searchProducts,
 } from "@/lib/catalog";
-import { useCatalog, useCategories } from "@/lib/catalog";
+import { useCatalog, useCategories, useProductsStatus } from "@/lib/catalog";
 import type { CategoryId } from "@/lib/types";
 import { PackageSearch } from "lucide-react";
 
@@ -30,6 +31,7 @@ export function CatalogView({
 }) {
   const catalog = useCatalog();
   const categories = useCategories();
+  const productsStatus = useProductsStatus();
   const validCat = categories.some((c) => c.slug === initialCat)
     ? (initialCat as CategoryId)
     : undefined;
@@ -120,7 +122,12 @@ export function CatalogView({
                 )
                 .join(", ")}`}
           </p>
-          {results.length === 0 ? (
+          {productsStatus === "loading" && catalog.length === 0 ? (
+            <ProductGridSkeleton
+              count={8}
+              columns="grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4"
+            />
+          ) : results.length === 0 ? (
             <EmptyState
               icon={PackageSearch}
               title="Sin resultados"
