@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   BadgeDollarSign,
@@ -58,7 +58,7 @@ import {
 } from "@/lib/admin-api";
 import { STORAGE_BUCKET, getSupabaseClient } from "@/lib/supabase";
 import { reloadCatalog } from "@/lib/catalog";
-import { useRoute } from "@/lib/router";
+import { navigate, useRoute } from "@/lib/router";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -250,6 +250,8 @@ export function AdminView() {
     if (token) void recargar();
   }, [token, recargar]);
 
+  const handledOrderRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (targetOrder) {
       setActiveTab("pedidos");
@@ -257,17 +259,24 @@ export function AdminView() {
   }, [targetOrder]);
 
   useEffect(() => {
-    if (targetOrder && orders.length > 0 && !solicitud && token && !cargandoDetalle) {
+    if (
+      targetOrder &&
+      handledOrderRef.current !== targetOrder &&
+      orders.length > 0 &&
+      token &&
+      !cargandoDetalle
+    ) {
       const found = orders.find(
         (o) =>
           o.reference.toLowerCase() === targetOrder.toLowerCase() ||
           o.id.toLowerCase() === targetOrder.toLowerCase()
       );
       if (found) {
+        handledOrderRef.current = targetOrder;
         void abrirSolicitud(found);
       }
     }
-  }, [targetOrder, orders, solicitud, token, cargandoDetalle]);
+  }, [targetOrder, orders, token, cargandoDetalle]);
 
   useEffect(() => {
     if (!modalProducto) {
@@ -553,6 +562,14 @@ export function AdminView() {
     }
   };
 
+  const cerrarDialogoSolicitud = () => {
+    setSolicitud(null);
+    setDetalle(null);
+    if (route.query.has("order")) {
+      navigate("/admin", { replace: true, keepScroll: true });
+    }
+  };
+
   const lineasFinales = itemsEdicion.filter((l) => !l.quitar);
   const haySinPrecio = lineasFinales.some((l) => {
     const valor = Number.parseFloat(l.price.replace(",", "."));
@@ -592,8 +609,7 @@ export function AdminView() {
       toast.success(
         resultado === "closed" ? "Solicitud marcada como vendida" : "Solicitud cancelada"
       );
-      setSolicitud(null);
-      setDetalle(null);
+      cerrarDialogoSolicitud();
       await recargar();
     } catch (error) {
       toast.error(mensajeError(error));
@@ -1430,8 +1446,7 @@ export function AdminView() {
         open={solicitud !== null}
         onOpenChange={(open) => {
           if (!open) {
-            setSolicitud(null);
-            setDetalle(null);
+            cerrarDialogoSolicitud();
           }
         }}
       >
@@ -1677,10 +1692,7 @@ export function AdminView() {
           <DialogFooter className="mt-2 gap-2">
             <Button
               variant="outline"
-              onClick={() => {
-                setSolicitud(null);
-                setDetalle(null);
-              }}
+              onClick={cerrarDialogoSolicitud}
               className="h-10 rounded-full border-input bg-card"
             >
               Cerrar
