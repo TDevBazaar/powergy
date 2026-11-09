@@ -142,27 +142,27 @@ export function CheckoutView() {
             registrado. Te estamos redirigiendo a WhatsApp para confirmar el pago y la entrega...
           </p>
           <div className="mt-6 rounded-2xl bg-secondary/70 p-4 text-left text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Artículos</span>
-              <span className="font-medium">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="shrink-0 text-muted-foreground">Artículos</span>
+              <span className="text-right font-medium">
                 {confirmed.items.reduce((a, i) => a + i.qty, 0)}
               </span>
             </div>
-            <div className="mt-1.5 flex justify-between">
-              <span className="text-muted-foreground">Dirección</span>
-              <span className="max-w-[65%] truncate text-right font-medium">
+            <div className="mt-1.5 flex items-baseline justify-between gap-3">
+              <span className="shrink-0 text-muted-foreground">Dirección</span>
+              <span className="min-w-0 break-words text-right font-medium">
                 {confirmed.customer.address}
               </span>
             </div>
-            <div className="mt-1.5 flex justify-between">
-              <span className="text-muted-foreground">Envío</span>
-              <span className="font-medium text-camel-deep">
+            <div className="mt-1.5 flex items-baseline justify-between gap-3">
+              <span className="shrink-0 text-muted-foreground">Envío</span>
+              <span className="text-right text-xs font-medium text-camel-deep">
                 Confirmación por WhatsApp
               </span>
             </div>
-            <div className="mt-1.5 flex justify-between">
-              <span className="text-muted-foreground">Total</span>
-              <span className="font-bold">{formatPrice(confirmed.total)}</span>
+            <div className="mt-1.5 flex items-baseline justify-between gap-3">
+              <span className="shrink-0 text-muted-foreground">Total</span>
+              <span className="text-right font-bold">{formatPrice(confirmed.total)}</span>
             </div>
           </div>
           <div className="mt-7 flex flex-col gap-2.5 sm:flex-row sm:justify-center">
@@ -195,14 +195,14 @@ export function CheckoutView() {
 
   if (pending && lines.length === 0) {
     return (
-      <div className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6 animate-pulse">
-        <div className="mb-7 space-y-2">
+      <div className="mx-auto max-w-6xl px-4 pb-16 pt-6 sm:px-6 sm:pt-8 animate-pulse">
+        <div className="mb-6 space-y-2 sm:mb-7">
           <div className="h-3 w-28 rounded-md bg-secondary" />
           <div className="h-9 w-56 rounded-md bg-secondary" />
         </div>
-        <div className="grid gap-8 lg:grid-cols-[1fr_380px]">
-          <div className="h-96 rounded-[1.5rem] bg-secondary/70 shadow-card" />
-          <div className="h-80 rounded-[1.5rem] bg-secondary/70 shadow-card" />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-8">
+          <div className="h-96 min-w-0 rounded-[1.5rem] bg-secondary/70 shadow-card" />
+          <div className="h-80 min-w-0 rounded-[1.5rem] bg-secondary/70 shadow-card" />
         </div>
       </div>
     );
@@ -210,7 +210,7 @@ export function CheckoutView() {
 
   if (lines.length === 0) {
     return (
-      <div className="mx-auto max-w-6xl px-4 pt-8 sm:px-6">
+      <div className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6">
         <EmptyState
           icon={ShoppingBag}
           title="No hay nada que pedir"
@@ -306,17 +306,17 @@ export function CheckoutView() {
       </header>
 
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
-        <div className="grid gap-8 lg:grid-cols-[1fr_380px]">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-8">
           {/* ── Columna izquierda: datos ── */}
-          <div className="space-y-6">
+          <div className="min-w-0 space-y-5 sm:space-y-6">
             {/* Datos de entrega */}
-            <section className="rounded-[1.5rem] bg-card p-6 shadow-card">
+            <section className="rounded-[1.5rem] bg-card p-4 shadow-card sm:p-6">
               <h2 className="flex items-center gap-2 text-base font-semibold">
-                <BadgeCheck className="h-4.5 w-4.5 text-camel-deep" />
+                <BadgeCheck className="h-4.5 w-4.5 shrink-0 text-camel-deep" />
                 Datos de entrega
               </h2>
-              <div className="mt-5 grid gap-4">
-                <div>
+              <div className="mt-4 flex min-w-0 flex-col gap-4 sm:mt-5">
+                <div className="min-w-0">
                   <Label htmlFor="address">Dirección de entrega *</Label>
                   <Input
                     id="address"
@@ -326,7 +326,7 @@ export function CheckoutView() {
                   />
                   {fieldError(errors.address?.message)}
                 </div>
-                <div>
+                <div className="min-w-0">
                   <Label htmlFor="notes">Notas para el repartidor (opcional)</Label>
                   <Textarea
                     id="notes"
@@ -340,35 +340,37 @@ export function CheckoutView() {
             </section>
 
             {/* Envío */}
-            <section className="rounded-[1.5rem] bg-card p-6 shadow-card">
+            <section className="rounded-[1.5rem] bg-card p-4 shadow-card sm:p-6">
               <h2 className="flex items-center gap-2 text-base font-semibold">
-                <Truck className="h-4.5 w-4.5 text-camel-deep" />
+                <Truck className="h-4.5 w-4.5 shrink-0 text-camel-deep" />
                 Método de envío
               </h2>
               <div className="mt-4">
-                <div className="flex items-center gap-3 rounded-2xl border border-camel bg-secondary/60 p-4">
-                  <span className="flex h-4 w-4 items-center justify-center rounded-full border-2 border-camel">
+                <div className="flex items-start gap-3 rounded-2xl border border-camel bg-secondary/60 p-3.5 sm:items-center sm:p-4">
+                  <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 border-camel sm:mt-0">
                     <span className="h-2 w-2 rounded-full bg-camel" />
                   </span>
-                  <div className="flex-1">
-                    <span className="block text-sm font-semibold">
-                      {SHIPPING_OPTIONS[0]?.label ?? "Envío estándar"}
-                    </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <span className="text-sm font-semibold">
+                        {SHIPPING_OPTIONS[0]?.label ?? "Envío estándar"}
+                      </span>
+                      <span className="text-xs font-semibold text-camel-deep">
+                        Por confirmar
+                      </span>
+                    </div>
                     <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
                       Para hoy mismo se le enviará una confirmación por WhatsApp con el precio del envío
                     </span>
                   </div>
-                  <span className="text-right text-xs font-semibold text-camel-deep">
-                    Por confirmar
-                  </span>
                 </div>
               </div>
             </section>
 
             {/* Pago */}
-            <section className="rounded-[1.5rem] border border-dashed border-camel bg-card p-6 shadow-card">
+            <section className="rounded-[1.5rem] border border-dashed border-camel bg-card p-4 shadow-card sm:p-6">
               <h2 className="flex items-center gap-2 text-base font-semibold">
-                <BadgeCheck className="h-4.5 w-4.5 text-camel-deep" />
+                <BadgeCheck className="h-4.5 w-4.5 shrink-0 text-camel-deep" />
                 Pago por WhatsApp
               </h2>
               <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
@@ -379,12 +381,12 @@ export function CheckoutView() {
           </div>
 
           {/* ── Columna derecha: resumen ── */}
-          <aside>
-            <div className="sticky top-28 rounded-[1.5rem] bg-card p-6 shadow-card">
+          <aside className="min-w-0">
+            <div className="rounded-[1.5rem] bg-card p-4 shadow-card sm:p-6 lg:sticky lg:top-28">
               <h2 className="text-base font-semibold">Tu pedido</h2>
               <ul className="nice-scroll mt-4 max-h-64 space-y-3 overflow-y-auto pr-1">
                 {lines.map((l) => (
-                  <li key={`${l.productId}`} className="flex items-center gap-3">
+                  <li key={`${l.productId}`} className="flex min-w-0 items-center gap-3">
                     <span className="relative shrink-0">
                       <LazyImage
                         src={l.product.images[0]}
@@ -397,14 +399,14 @@ export function CheckoutView() {
                       </span>
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-medium">
+                      <span className="line-clamp-2 break-words text-[13px] font-medium leading-snug">
                         {l.product.name}
                       </span>
-                      <span className="block text-[11px] text-muted-foreground">
+                      <span className="block truncate text-[11px] text-muted-foreground">
                         {l.product.categoryName}
                       </span>
                     </span>
-                    <span className="text-[13px] font-semibold">
+                    <span className="shrink-0 text-right text-[13px] font-semibold">
                       {formatPriceLabel(l.lineTotal)}
                     </span>
                   </li>
@@ -414,20 +416,20 @@ export function CheckoutView() {
               <Separator className="my-4 bg-border" />
 
               <div className="space-y-2.5 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-medium">{formatPrice(subtotal)}</span>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="shrink-0 text-muted-foreground">Subtotal</span>
+                  <span className="text-right font-medium">{formatPrice(subtotal)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Envío</span>
-                  <span className="text-xs font-medium text-camel-deep">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="shrink-0 text-muted-foreground">Envío</span>
+                  <span className="text-right text-xs font-medium text-camel-deep">
                     Por confirmar por WhatsApp
                   </span>
                 </div>
                 <Separator className="bg-border" />
-                <div className="flex justify-between text-base">
-                  <span className="font-semibold">Total productos</span>
-                  <span className="font-bold">{formatPrice(subtotal)}</span>
+                <div className="flex items-baseline justify-between gap-3 text-base">
+                  <span className="shrink-0 font-semibold">Total productos</span>
+                  <span className="text-right font-bold">{formatPrice(subtotal)}</span>
                 </div>
               </div>
 

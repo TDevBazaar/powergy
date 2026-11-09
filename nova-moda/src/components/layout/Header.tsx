@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 function Badge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
-    <span className="absolute -right-1 -top-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-camel px-1 text-[10px] font-semibold leading-none text-white shadow-card">
+    <span className="absolute -right-0.5 -top-0.5 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-camel px-1 text-[10px] font-semibold leading-none text-white shadow-card">
       {count > 9 ? "9+" : count}
     </span>
   );
@@ -45,14 +45,14 @@ export function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-3 sm:gap-3 sm:px-6">
         {/* Izquierda: menú móvil / nav desktop */}
-        <div className="flex flex-1 items-center gap-1">
+        <div className="flex items-center gap-1 md:flex-1">
           <button
             type="button"
             onClick={onOpenMenu}
             aria-label="Abrir menú"
-            className="flex h-10 w-10 items-center justify-center rounded-full transition hover:bg-secondary md:hidden"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition hover:bg-secondary sm:h-10 sm:w-10 md:hidden"
           >
             <Menu className="h-5 w-5" />
           </button>
@@ -84,21 +84,21 @@ export function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
           className="flex shrink-0 flex-col items-center leading-none"
           aria-label="NOVA MODA — Inicio"
         >
-          <span className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-foreground font-display text-[13px] font-bold text-background">
+          <span className="flex items-center gap-1.5 sm:gap-2">
+            <span className="flex h-6.5 w-6.5 items-center justify-center rounded-full bg-foreground font-display text-[12px] font-bold text-background sm:h-7 sm:w-7 sm:text-[13px]">
               N
             </span>
-            <span className="text-[15px] font-bold tracking-[0.18em]">
+            <span className="text-[13.5px] font-bold tracking-[0.14em] sm:text-[15px] sm:tracking-[0.18em]">
               NOVA MODA
             </span>
           </span>
-          <span className="mt-1 text-[8.5px] font-medium tracking-[0.42em] text-muted-foreground">
+          <span className="mt-1 text-[8px] font-medium tracking-[0.3em] text-muted-foreground sm:text-[8.5px] sm:tracking-[0.42em]">
             ROPA Y ACCESORIOS
           </span>
         </a>
 
         {/* Derecha: acciones */}
-        <div className="flex flex-1 items-center justify-end gap-1">
+        <div className="flex shrink-0 items-center justify-end gap-0.5 sm:gap-1 md:flex-1">
           <button
             type="button"
             aria-label="Buscar productos"
@@ -108,14 +108,14 @@ export function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
                 document.getElementById("catalog-search")?.focus();
               }, 60);
             }}
-            className="flex h-10 w-10 items-center justify-center rounded-full transition hover:bg-secondary"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition hover:bg-secondary sm:h-10 sm:w-10"
           >
             <Search className="h-[18px] w-[18px]" />
           </button>
           <a
             href={href("/favoritos")}
             aria-label={`Favoritos (${favs.length})`}
-            className="relative flex h-10 w-10 items-center justify-center rounded-full transition hover:bg-secondary"
+            className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition hover:bg-secondary sm:h-10 sm:w-10"
           >
             <Heart className="h-[18px] w-[18px]" />
             <Badge count={favs.length} />
@@ -123,7 +123,7 @@ export function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
           <a
             href={href("/carrito")}
             aria-label={`Carrito (${count} artículos)`}
-            className="relative flex h-10 w-10 items-center justify-center rounded-full transition hover:bg-secondary"
+            className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition hover:bg-secondary sm:h-10 sm:w-10"
           >
             <ShoppingBag className="h-[18px] w-[18px]" />
             <Badge count={count} />
