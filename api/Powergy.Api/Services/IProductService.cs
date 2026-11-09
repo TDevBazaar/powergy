@@ -8,8 +8,26 @@ public interface IProductService
         ProductQueryRequest request,
         CancellationToken cancellationToken);
 
+    Task<CursorPagedResponse<ProductResponse>> GetPublicCursorPageAsync(
+        ProductCursorQueryRequest request,
+        CancellationToken cancellationToken);
+
+    Task<ProductCatalogMetaResponse> GetCatalogMetaAsync(
+        string? store,
+        CancellationToken cancellationToken);
+
     Task<ProductResponse?> GetBySlugAsync(
         string slug,
+        string? store,
+        CancellationToken cancellationToken);
+
+    Task<ProductResponse?> GetByIdAsync(
+        string id,
+        string? store,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<ProductResponse>> GetByIdsAsync(
+        IReadOnlyList<string> ids,
         string? store,
         CancellationToken cancellationToken);
 

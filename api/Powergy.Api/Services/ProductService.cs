@@ -1,3 +1,5 @@
+using System.Buffers.Text;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Powergy.Api.Contracts;
 using Powergy.Api.Data;
@@ -9,10 +11,81 @@ namespace Powergy.Api.Services;
 
 public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) : IProductService
 {
+    private sealed record ProductCursorToken(
+        string Sort,
+        string Id,
+        int? TopRank,
+        string Name,
+        decimal EffectivePrice,
+        bool IsUnpriced,
+        DateTime CreatedAt);
+
     public Task<PagedResponse<ProductResponse>> GetPublicPageAsync(
         ProductQueryRequest request,
         CancellationToken cancellationToken)
         => GetPageAsync(request, admin: false, cancellationToken);
+
+    public async Task<CursorPagedResponse<ProductResponse>> GetPublicCursorPageAsync(
+        ProductCursorQueryRequest request,
+        CancellationToken cancellationToken)
+    {
+        var sort = ProductSortModes.Resolve(request.Sort);
+        var store = StoreKeys.Resolve(request.Store);
+        var cursor = string.IsNullOrWhiteSpace(request.Cursor)
+            ? null
+            : DecodeCursor(request.Cursor.Trim(), sort);
+
+        var specification = new ProductCatalogSpecification(request, store);
+        var filteredQuery = ApplySearchTerms(
+            SpecificationEvaluator.GetQuery(db.Products.AsNoTracking(), specification),
+            request.Q);
+
+        int? totalItems = cursor is null
+            ? await filteredQuery.CountAsync(cancellationToken)
+            : null;
+
+        if (cursor is not null)
+        {
+            filteredQuery = ApplyCursor(filteredQuery, sort, cursor);
+        }
+
+        var rows = await ApplyOrdering(filteredQuery, sort)
+            .Take(request.Limit + 1)
+            .ToListAsync(cancellationToken);
+
+        var hasMore = rows.Count > request.Limit;
+        var pageItems = hasMore ? rows.Take(request.Limit).ToArray() : rows.ToArray();
+        var nextCursor = hasMore
+            ? EncodeCursor(sort, pageItems[^1])
+            : null;
+
+        return new CursorPagedResponse<ProductResponse>(
+            pageItems.Select(ProductResponse.From).ToArray(),
+            nextCursor,
+            hasMore,
+            request.Limit,
+            totalItems);
+    }
+
+    public async Task<ProductCatalogMetaResponse> GetCatalogMetaAsync(
+        string? store,
+        CancellationToken cancellationToken)
+    {
+        var tienda = StoreKeys.Resolve(store);
+        var activeQuery = db.Products
+            .AsNoTracking()
+            .Where(product =>
+                product.Store == tienda
+                && product.IsActive
+                && product.Category.IsActive);
+
+        var totalActive = await activeQuery.CountAsync(cancellationToken);
+        var maxPriceUsd = await activeQuery.MaxAsync(
+            product => (decimal?)product.PriceUsd,
+            cancellationToken);
+
+        return new ProductCatalogMetaResponse(totalActive, maxPriceUsd);
+    }
 
     public Task<PagedResponse<ProductResponse>> GetAdminPageAsync(
         ProductQueryRequest request,
@@ -32,6 +105,54 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
             .FirstOrDefaultAsync(cancellationToken);
 
         return product is null ? null : ProductResponse.From(product);
+    }
+
+    public async Task<ProductResponse?> GetByIdAsync(
+        string id,
+        string? store,
+        CancellationToken cancellationToken)
+    {
+        var trimmed = id.Trim();
+        if (trimmed.Length == 0)
+        {
+            return null;
+        }
+
+        var specification = new ActiveProductByIdSpecification(
+            trimmed,
+            StoreKeys.Resolve(store));
+        var product = await SpecificationEvaluator
+            .GetQuery(db.Products.AsNoTracking(), specification)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return product is null ? null : ProductResponse.From(product);
+    }
+
+    public async Task<IReadOnlyList<ProductResponse>> GetByIdsAsync(
+        IReadOnlyList<string> ids,
+        string? store,
+        CancellationToken cancellationToken)
+    {
+        var cleanIds = ids
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .Take(50)
+            .ToArray();
+
+        if (cleanIds.Length == 0)
+        {
+            return [];
+        }
+
+        var specification = new ActiveProductsByIdsSpecification(
+            cleanIds,
+            StoreKeys.Resolve(store));
+        var products = await SpecificationEvaluator
+            .GetQuery(db.Products.AsNoTracking(), specification)
+            .ToListAsync(cancellationToken);
+
+        return products.Select(ProductResponse.From).ToArray();
     }
 
     public async Task<ProductResponse> CreateAsync(
@@ -238,19 +359,17 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
         bool admin,
         CancellationToken cancellationToken)
     {
+        var sort = ProductSortModes.Resolve(request.Sort);
         var specification = new ProductCatalogSpecification(
             request,
             admin,
             StoreKeys.Resolve(request.Store));
-        var filteredQuery = SpecificationEvaluator.GetQuery(
-            db.Products.AsNoTracking(),
-            specification);
+        var filteredQuery = ApplySearchTerms(
+            SpecificationEvaluator.GetQuery(db.Products.AsNoTracking(), specification),
+            request.Q);
 
         var totalItems = await filteredQuery.CountAsync(cancellationToken);
-        var items = await filteredQuery
-            .OrderBy(product => product.TopRank)
-            .ThenBy(product => product.Name)
-            .ThenBy(product => product.Id)
+        var items = await ApplyOrdering(filteredQuery, sort)
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);
@@ -261,6 +380,181 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
             request.PageSize,
             totalItems,
             (int)Math.Ceiling(totalItems / (double)request.PageSize));
+    }
+
+    private static IQueryable<Product> ApplySearchTerms(
+        IQueryable<Product> query,
+        string? rawQuery)
+    {
+        var trimmed = rawQuery?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            return query;
+        }
+
+        var tokens = trimmed
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Take(6);
+
+        foreach (var token in tokens)
+        {
+            var pattern = $"%{EscapeLike(token)}%";
+            query = query.Where(product =>
+                EF.Functions.ILike(product.Name, pattern, "\\")
+                || EF.Functions.ILike(product.Brand, pattern, "\\")
+                || EF.Functions.ILike(product.Model, pattern, "\\")
+                || EF.Functions.ILike(product.Subcategory, pattern, "\\")
+                || EF.Functions.ILike(product.Specifications, pattern, "\\")
+                || EF.Functions.ILike(product.Category.Name, pattern, "\\"));
+        }
+
+        return query;
+    }
+
+    private static string EscapeLike(string value) =>
+        value.Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal);
+
+    private static IQueryable<Product> ApplyOrdering(
+        IQueryable<Product> query,
+        string sort) =>
+        sort switch
+        {
+            ProductSortModes.PrecioAsc => query
+                .OrderBy(product => product.PriceUsd == null || product.PriceUsd <= 0)
+                .ThenBy(product => product.PriceUsd ?? 0m)
+                .ThenBy(product => product.Name)
+                .ThenBy(product => product.Id),
+            ProductSortModes.PrecioDesc => query
+                .OrderBy(product => product.PriceUsd == null || product.PriceUsd <= 0)
+                .ThenByDescending(product => product.PriceUsd ?? 0m)
+                .ThenBy(product => product.Name)
+                .ThenBy(product => product.Id),
+            ProductSortModes.Nuevos => query
+                .OrderByDescending(product => product.CreatedAt)
+                .ThenBy(product => product.Id),
+            _ => query
+                .OrderBy(product => product.TopRank)
+                .ThenBy(product => product.Name)
+                .ThenBy(product => product.Id)
+        };
+
+    private static IQueryable<Product> ApplyCursor(
+        IQueryable<Product> query,
+        string sort,
+        ProductCursorToken cursor)
+    {
+        switch (sort)
+        {
+            case ProductSortModes.PrecioAsc:
+                if (!cursor.IsUnpriced)
+                {
+                    return query.Where(product =>
+                        product.PriceUsd == null
+                        || product.PriceUsd <= 0
+                        || (product.PriceUsd > 0
+                            && ((product.PriceUsd ?? 0m) > cursor.EffectivePrice
+                                || ((product.PriceUsd ?? 0m) == cursor.EffectivePrice
+                                    && (string.Compare(product.Name, cursor.Name) > 0
+                                        || (product.Name == cursor.Name
+                                            && string.Compare(product.Id, cursor.Id) > 0))))));
+                }
+
+                return query.Where(product =>
+                    (product.PriceUsd == null || product.PriceUsd <= 0)
+                    && (string.Compare(product.Name, cursor.Name) > 0
+                        || (product.Name == cursor.Name
+                            && string.Compare(product.Id, cursor.Id) > 0)));
+
+            case ProductSortModes.PrecioDesc:
+                if (!cursor.IsUnpriced)
+                {
+                    return query.Where(product =>
+                        product.PriceUsd == null
+                        || product.PriceUsd <= 0
+                        || (product.PriceUsd > 0
+                            && ((product.PriceUsd ?? 0m) < cursor.EffectivePrice
+                                || ((product.PriceUsd ?? 0m) == cursor.EffectivePrice
+                                    && (string.Compare(product.Name, cursor.Name) > 0
+                                        || (product.Name == cursor.Name
+                                            && string.Compare(product.Id, cursor.Id) > 0))))));
+                }
+
+                return query.Where(product =>
+                    (product.PriceUsd == null || product.PriceUsd <= 0)
+                    && (string.Compare(product.Name, cursor.Name) > 0
+                        || (product.Name == cursor.Name
+                            && string.Compare(product.Id, cursor.Id) > 0)));
+
+            case ProductSortModes.Nuevos:
+                return query.Where(product =>
+                    product.CreatedAt < cursor.CreatedAt
+                    || (product.CreatedAt == cursor.CreatedAt
+                        && string.Compare(product.Id, cursor.Id) > 0));
+
+            default:
+                if (cursor.TopRank.HasValue)
+                {
+                    var rank = cursor.TopRank.Value;
+                    return query.Where(product =>
+                        product.TopRank == null
+                        || product.TopRank > rank
+                        || (product.TopRank == rank
+                            && (string.Compare(product.Name, cursor.Name) > 0
+                                || (product.Name == cursor.Name
+                                    && string.Compare(product.Id, cursor.Id) > 0))));
+                }
+
+                return query.Where(product =>
+                    product.TopRank == null
+                    && (string.Compare(product.Name, cursor.Name) > 0
+                        || (product.Name == cursor.Name
+                            && string.Compare(product.Id, cursor.Id) > 0)));
+        }
+    }
+
+    private static string EncodeCursor(string sort, Product product)
+    {
+        var isUnpriced = product.PriceUsd is null or <= 0;
+        var token = new ProductCursorToken(
+            sort,
+            product.Id,
+            product.TopRank,
+            product.Name,
+            isUnpriced ? 0m : product.PriceUsd!.Value,
+            isUnpriced,
+            DateTime.SpecifyKind(product.CreatedAt, DateTimeKind.Utc));
+
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(token);
+        return Base64Url.EncodeToString(bytes);
+    }
+
+    private static ProductCursorToken DecodeCursor(string encoded, string expectedSort)
+    {
+        try
+        {
+            var bytes = Base64Url.DecodeFromChars(encoded);
+            var token = JsonSerializer.Deserialize<ProductCursorToken>(bytes);
+            if (token is null
+                || string.IsNullOrWhiteSpace(token.Id)
+                || token.Name is null
+                || token.Sort != expectedSort)
+            {
+                throw new ApiValidationException("El cursor de paginación no es válido.");
+            }
+
+            return token with
+            {
+                CreatedAt = DateTime.SpecifyKind(
+                    token.CreatedAt.ToUniversalTime(),
+                    DateTimeKind.Utc)
+            };
+        }
+        catch (Exception exception) when (exception is FormatException or JsonException or ArgumentException)
+        {
+            throw new ApiValidationException("El cursor de paginación no es válido.");
+        }
     }
 
     private static string RequiredText(string value, string fieldName)

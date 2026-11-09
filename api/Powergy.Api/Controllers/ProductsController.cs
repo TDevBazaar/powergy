@@ -24,6 +24,67 @@ public sealed class ProductsController(IProductService products) : ControllerBas
         return Ok(page);
     }
 
+    /// <summary>Returns a cursor-paged batch of active catalog products for infinite scroll.</summary>
+    [HttpGet("cursor")]
+    [ProducesResponseType(typeof(CursorPagedResponse<ProductResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<CursorPagedResponse<ProductResponse>>> GetProductsByCursor(
+        [FromQuery] ProductCursorQueryRequest request,
+        CancellationToken cancellationToken)
+    {
+        Response.SetPublicCatalogCache();
+        var batch = await products.GetPublicCursorPageAsync(request, cancellationToken);
+        return Ok(batch);
+    }
+
+    /// <summary>Returns summary metadata (count and max price) for the active store catalog.</summary>
+    [HttpGet("meta")]
+    [ProducesResponseType(typeof(ProductCatalogMetaResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ProductCatalogMetaResponse>> GetCatalogMeta(
+        [FromQuery] string? store,
+        CancellationToken cancellationToken)
+    {
+        Response.SetPublicCatalogCache();
+        var meta = await products.GetCatalogMetaAsync(store, cancellationToken);
+        return Ok(meta);
+    }
+
+    /// <summary>Returns active catalog products matching a comma-separated list of IDs.</summary>
+    [HttpGet("batch")]
+    [ProducesResponseType(typeof(IReadOnlyList<ProductResponse>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<ProductResponse>>> GetProductsByIds(
+        [FromQuery] string? ids,
+        [FromQuery] string? store,
+        CancellationToken cancellationToken)
+    {
+        var list = string.IsNullOrWhiteSpace(ids)
+            ? Array.Empty<string>()
+            : ids.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        Response.SetPublicCatalogCache();
+        var items = await products.GetByIdsAsync(list, store, cancellationToken);
+        return Ok(items);
+    }
+
+    /// <summary>Returns an active catalog product by ID.</summary>
+    [HttpGet("by-id/{id}")]
+    [ProducesResponseType(typeof(ProductResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ProductResponse>> GetProductById(
+        string id,
+        [FromQuery] string? store,
+        CancellationToken cancellationToken)
+    {
+        var product = await products.GetByIdAsync(id, store, cancellationToken);
+        if (product is null)
+        {
+            return NotFound();
+        }
+
+        Response.SetPublicCatalogCache();
+        return Ok(product);
+    }
+
     /// <summary>Returns an active catalog product by slug.</summary>
     [HttpGet("{slug}")]
     [ProducesResponseType(typeof(ProductResponse), StatusCodes.Status200OK)]
