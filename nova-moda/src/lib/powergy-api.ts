@@ -58,6 +58,19 @@ export interface ApiPage<T> {
   totalPages: number;
 }
 
+export interface ApiCursorPage<T> {
+  items: T[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  pageSize: number;
+  totalItems: number | null;
+}
+
+export interface ApiCatalogMeta {
+  totalActive: number;
+  maxPriceUsd: number | null;
+}
+
 export interface ApiOrderLine {
   productId: string;
   productName: string;
@@ -215,11 +228,13 @@ async function parseError(response: Response): Promise<string> {
 
 export async function apiGet<T>(
   path: string,
-  token?: string | null
+  token?: string | null,
+  signal?: AbortSignal
 ): Promise<T> {
   const response = await fetch(`${API_BASE}/${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     cache: "no-store",
+    signal,
   });
   if (!response.ok) {
     throw new ApiError(await parseError(response), response.status);
@@ -248,18 +263,177 @@ export async function apiSend<T>(
 }
 
 /** Categorías de la tienda (rápido, solo 1 petición) */
-export async function fetchStoreCategories(): Promise<CategoryView[]> {
+export async function fetchStoreCategories(
+  signal?: AbortSignal
+): Promise<CategoryView[]> {
   const categories = (
     await apiGet<ApiCategory[]>(
-      "categories?store=" + encodeURIComponent(NOVA_STORE)
+      "categories?store=" + encodeURIComponent(NOVA_STORE),
+      undefined,
+      signal
     )
   ).map(mapCategory);
   return categories;
 }
 
+export type CategoryMap = Map<string, { slug: string; name: string }>;
+
+export interface ProductQueryOptions {
+  categories?: string[];
+  q?: string;
+  maxPrice?: number;
+  onSale?: boolean;
+  featured?: boolean;
+  sort?: "destacados" | "precio-asc" | "precio-desc" | "nuevos";
+  page?: number;
+  pageSize?: number;
+  cursor?: string | null;
+  limit?: number;
+}
+
+function buildProductSearchParams(opts: ProductQueryOptions): URLSearchParams {
+  const params = new URLSearchParams({ store: NOVA_STORE });
+
+  const cats = (opts.categories ?? []).map((c) => c.trim()).filter(Boolean);
+  if (cats.length === 1) {
+    params.set("category", cats[0]);
+  } else if (cats.length > 1) {
+    params.set("categories", cats.join(","));
+  }
+
+  const q = opts.q?.trim();
+  if (q) params.set("q", q);
+
+  if (opts.maxPrice && opts.maxPrice > 0) {
+    params.set("maxPrice", String(opts.maxPrice));
+  }
+  if (opts.onSale) params.set("onSale", "true");
+  if (opts.featured !== undefined) params.set("featured", String(opts.featured));
+  if (opts.sort) params.set("sort", opts.sort);
+
+  return params;
+}
+
+/** Página tradicional de productos (p.ej. 20 por página cuando hay categoría) */
+export async function fetchProductsPage(
+  opts: ProductQueryOptions,
+  categoriesById: CategoryMap = new Map(),
+  signal?: AbortSignal
+): Promise<ApiPage<ProductView>> {
+  const params = buildProductSearchParams(opts);
+  params.set("page", String(opts.page ?? 1));
+  params.set("pageSize", String(opts.pageSize ?? 20));
+
+  const result = await apiGet<ApiPage<ApiProduct>>(
+    `products?${params.toString()}`,
+    undefined,
+    signal
+  );
+
+  return {
+    ...result,
+    items: result.items.map((item) => mapProduct(item, categoriesById)),
+  };
+}
+
+/** Lote por cursor para scroll infinito (sin categoría marcada) */
+export async function fetchProductsCursor(
+  opts: ProductQueryOptions,
+  categoriesById: CategoryMap = new Map(),
+  signal?: AbortSignal
+): Promise<ApiCursorPage<ProductView>> {
+  const params = buildProductSearchParams(opts);
+  params.set("limit", String(opts.limit ?? 12));
+  if (opts.cursor) params.set("cursor", opts.cursor);
+
+  const result = await apiGet<ApiCursorPage<ApiProduct>>(
+    `products/cursor?${params.toString()}`,
+    undefined,
+    signal
+  );
+
+  return {
+    ...result,
+    items: result.items.map((item) => mapProduct(item, categoriesById)),
+  };
+}
+
+/** Metadatos del catálogo activo (total y precio máximo) */
+export async function fetchCatalogMeta(
+  signal?: AbortSignal
+): Promise<ApiCatalogMeta> {
+  return apiGet<ApiCatalogMeta>(
+    `products/meta?store=${encodeURIComponent(NOVA_STORE)}`,
+    undefined,
+    signal
+  );
+}
+
+/** Producto individual por ID (con respaldo por slug si llega uno) */
+export async function fetchProductById(
+  id: string,
+  categoriesById: CategoryMap = new Map(),
+  signal?: AbortSignal
+): Promise<ProductView | null> {
+  const clean = id.trim();
+  if (!clean) return null;
+
+  try {
+    const item = await apiGet<ApiProduct>(
+      `products/by-id/${encodeURIComponent(clean)}?store=${encodeURIComponent(NOVA_STORE)}`,
+      undefined,
+      signal
+    );
+    return mapProduct(item, categoriesById);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      try {
+        const bySlug = await apiGet<ApiProduct>(
+          `products/${encodeURIComponent(clean)}?store=${encodeURIComponent(NOVA_STORE)}`,
+          undefined,
+          signal
+        );
+        return mapProduct(bySlug, categoriesById);
+      } catch (slugError) {
+        if (slugError instanceof ApiError && slugError.status === 404) {
+          return null;
+        }
+        throw slugError;
+      }
+    }
+    throw error;
+  }
+}
+
+/** Lote puntual de productos por IDs (carrito y favoritos) */
+export async function fetchProductsByIds(
+  ids: string[],
+  categoriesById: CategoryMap = new Map(),
+  signal?: AbortSignal
+): Promise<ProductView[]> {
+  const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+  if (unique.length === 0) return [];
+
+  const results: ProductView[] = [];
+  for (let i = 0; i < unique.length; i += 50) {
+    const chunk = unique.slice(i, i + 50);
+    const params = new URLSearchParams({
+      store: NOVA_STORE,
+      ids: chunk.join(","),
+    });
+    const items = await apiGet<ApiProduct[]>(
+      `products/batch?${params.toString()}`,
+      undefined,
+      signal
+    );
+    results.push(...items.map((item) => mapProduct(item, categoriesById)));
+  }
+  return results;
+}
+
 /** Productos de la tienda (hasta 5 páginas) */
 export async function fetchStoreProducts(
-  categoriesById: Map<string, { slug: string; name: string }> = new Map()
+  categoriesById: CategoryMap = new Map()
 ): Promise<ProductView[]> {
   const products: ProductView[] = [];
   for (let page = 1; page <= 5; page += 1) {

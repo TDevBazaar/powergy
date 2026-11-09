@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
-import { SlidersHorizontal } from "lucide-react";
+import { useCallback, useEffect, useMemo } from "react";
+import { PackageSearch, SlidersHorizontal } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -14,41 +14,66 @@ import { ProductCard } from "@/components/shop/ProductCard";
 import { ProductGridSkeleton } from "@/components/shop/Skeletons";
 import { EmptyState } from "@/components/shop/EmptyState";
 import { FilterControls } from "@/components/shop/FilterControls";
+import { CatalogFeedFooter } from "@/components/shop/CatalogFeedFooter";
 import { useFilterState } from "@/components/shop/useFilterState";
 import {
   activeFilterCount,
-  applyFilters,
-  searchProducts,
+  priceCeilingFromMax,
+  useCatalogMeta,
+  useCategories,
+  useCategoriesStatus,
 } from "@/lib/catalog";
-import { useCatalog, useCategories, useProductsStatus } from "@/lib/catalog";
+import { useCatalogFeed } from "@/lib/useCatalogFeed";
 import type { CategoryId } from "@/lib/types";
-import { PackageSearch } from "lucide-react";
 
 export function CatalogView({
   initialCat,
 }: {
   initialCat?: string | null;
 }) {
-  const catalog = useCatalog();
   const categories = useCategories();
-  const productsStatus = useProductsStatus();
-  const validCat = categories.some((c) => c.slug === initialCat)
-    ? (initialCat as CategoryId)
-    : undefined;
+  const categoriesStatus = useCategoriesStatus();
+  const meta = useCatalogMeta();
+
+  const validCat = useMemo(
+    () =>
+      initialCat && categories.some((c) => c.slug === initialCat)
+        ? (initialCat as CategoryId)
+        : undefined,
+    [categories, initialCat]
+  );
+
   const { filters, patch, reset } = useFilterState(
-    validCat ? { cats: [validCat] } : undefined
+    initialCat ? { cats: [initialCat as CategoryId] } : undefined
   );
 
-  // Si llega ?cat= desde el menú, sincroniza
+  // Si llega ?cat= desde el menú, sincroniza y valida en cuanto cargan las categorías
   useEffect(() => {
-    if (validCat) patch({ cats: [validCat] });
-  }, [validCat, patch]);
+    if (!initialCat) return;
+    if (categoriesStatus === "ready") {
+      patch({ cats: validCat ? [validCat] : [] });
+    } else if (categoriesStatus !== "error") {
+      patch({ cats: [initialCat as CategoryId] });
+    }
+  }, [initialCat, categoriesStatus, validCat, patch]);
 
-  const results = useMemo(
-    () => applyFilters(searchProducts(catalog, filters.q), filters),
-    [catalog, filters]
+  const feed = useCatalogFeed({
+    filters,
+    pageSize: 20,
+    cursorLimit: 12,
+  });
+
+  const handlePageChange = useCallback(
+    (nextPage: number) => {
+      feed.setPage(nextPage);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    },
+    [feed]
   );
+
   const activeCount = activeFilterCount(filters);
+  const maxPriceCeiling = priceCeilingFromMax(meta?.maxPriceUsd);
+  const totalDisplay = feed.totalItems ?? feed.items.length;
 
   return (
     <div className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6">
@@ -68,8 +93,9 @@ export function CatalogView({
       {/* Móvil: hoja de filtros */}
       <div className="mb-6 flex items-center justify-between gap-3 lg:hidden">
         <p className="text-sm text-muted-foreground">
-          {results.length}{" "}
-          {results.length === 1 ? "producto" : "productos"}
+          {feed.loadingInitial
+            ? "Cargando productos…"
+            : `${totalDisplay} ${totalDisplay === 1 ? "producto" : "productos"}`}
         </p>
         <Sheet>
           <SheetTrigger asChild>
@@ -89,7 +115,7 @@ export function CatalogView({
             </SheetHeader>
             <div className="px-1 pb-6">
               <FilterControls
-                products={catalog}
+                maxPriceCeiling={maxPriceCeiling}
                 filters={filters}
                 onChange={patch}
                 onReset={reset}
@@ -104,7 +130,7 @@ export function CatalogView({
         <aside className="hidden lg:block">
           <div className="sticky top-28">
             <FilterControls
-              products={catalog}
+              maxPriceCeiling={maxPriceCeiling}
               filters={filters}
               onChange={patch}
               onReset={reset}
@@ -114,20 +140,34 @@ export function CatalogView({
 
         <div>
           <p className="mb-5 hidden text-sm text-muted-foreground lg:block">
-            {results.length} {results.length === 1 ? "producto" : "productos"}
-            {filters.cats.length > 0 &&
-              ` · ${filters.cats
-                .map(
-                  (c) => categories.find((cat) => cat.slug === c)?.name ?? c
-                )
-                .join(", ")}`}
+            {feed.loadingInitial ? (
+              "Cargando productos…"
+            ) : (
+              <>
+                {totalDisplay} {totalDisplay === 1 ? "producto" : "productos"}
+                {filters.cats.length > 0 &&
+                  ` · ${filters.cats
+                    .map(
+                      (c) => categories.find((cat) => cat.slug === c)?.name ?? c
+                    )
+                    .join(", ")}`}
+              </>
+            )}
           </p>
-          {productsStatus === "loading" && catalog.length === 0 ? (
+          {feed.loadingInitial ? (
             <ProductGridSkeleton
               count={8}
               columns="grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4"
             />
-          ) : results.length === 0 ? (
+          ) : feed.error ? (
+            <EmptyState
+              icon={PackageSearch}
+              title="No se pudo cargar el catálogo"
+              description={feed.error}
+              ctaLabel="Reintentar"
+              onCta={feed.retry}
+            />
+          ) : feed.items.length === 0 ? (
             <EmptyState
               icon={PackageSearch}
               title="Sin resultados"
@@ -136,11 +176,28 @@ export function CatalogView({
               onCta={reset}
             />
           ) : (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4">
-              {results.map((p) => (
-                <ProductCard key={p.id} product={p} />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4">
+                {feed.items.map((p) => (
+                  <ProductCard key={p.id} product={p} />
+                ))}
+              </div>
+              <CatalogFeedFooter
+                isPaginated={feed.isPaginated}
+                page={feed.page}
+                totalPages={feed.totalPages}
+                totalItems={feed.totalItems}
+                pageSize={feed.pageSize}
+                hasMore={feed.hasMore}
+                itemCount={feed.items.length}
+                loadingInitial={feed.loadingInitial}
+                loadingMore={feed.loadingMore}
+                loadMoreError={feed.loadMoreError}
+                onPageChange={handlePageChange}
+                onRetryMore={feed.retry}
+                sentinelRef={feed.sentinelRef}
+              />
+            </>
           )}
         </div>
       </div>

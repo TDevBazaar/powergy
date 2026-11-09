@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { SlidersHorizontal, PackageSearch } from "lucide-react";
+import { useCallback } from "react";
+import { PackageSearch, SlidersHorizontal } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -11,48 +11,64 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/shop/ProductCard";
+import { LazyImage } from "@/components/shop/LazyImage";
 import { ProductGridSkeleton } from "@/components/shop/Skeletons";
 import { EmptyState } from "@/components/shop/EmptyState";
 import { FilterControls } from "@/components/shop/FilterControls";
+import { PaginationControls } from "@/components/shop/PaginationControls";
 import { useFilterState } from "@/components/shop/useFilterState";
 import {
   activeFilterCount,
-  applyFilters,
-  useCatalog,
+  priceCeilingFromMax,
+  useCatalogMeta,
   useCategories,
   useCategoriesStatus,
-  useProductsStatus,
 } from "@/lib/catalog";
+import { useCatalogFeed } from "@/lib/useCatalogFeed";
 import { categoryMedia } from "@/lib/category-media";
 import type { CategoryId } from "@/lib/types";
 
 export function CategoryView({ categoryId }: { categoryId: CategoryId }) {
-  const catalog = useCatalog();
   const categories = useCategories();
   const categoriesStatus = useCategoriesStatus();
-  const productsStatus = useProductsStatus();
+  const meta = useCatalogMeta();
 
   const category = categories.find((c) => c.slug === categoryId);
   const media = categoryMedia(categoryId);
 
-  const categoryProducts = useMemo(
-    () => catalog.filter((p) => p.category === categoryId),
-    [catalog, categoryId]
-  );
   const { filters, patch, reset } = useFilterState();
-  const results = useMemo(
-    () => applyFilters(categoryProducts, filters, { lockCategory: categoryId }),
-    [categoryProducts, filters, categoryId]
+  const feed = useCatalogFeed({
+    filters,
+    lockedCategory: categoryId,
+    ready: Boolean(category) || categoriesStatus === "error",
+    pageSize: 20,
+  });
+
+  const handlePageChange = useCallback(
+    (nextPage: number) => {
+      feed.setPage(nextPage);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    },
+    [feed]
   );
+
   const activeCount = activeFilterCount(filters);
+  const maxPriceCeiling = priceCeilingFromMax(meta?.maxPriceUsd);
+  const totalDisplay = feed.totalItems ?? feed.items.length;
 
   /* Categorías todavía cargando */
-  if (categoriesStatus === "loading" && !category) {
+  if (
+    (categoriesStatus === "idle" || categoriesStatus === "loading") &&
+    !category
+  ) {
     return (
       <div className="mx-auto max-w-6xl px-4 pb-16 pt-6 sm:px-6">
         <div className="h-44 w-full animate-pulse rounded-[2rem] bg-secondary sm:h-60" />
         <div className="mt-8">
-          <ProductGridSkeleton count={6} columns="grid-cols-2 sm:grid-cols-3 xl:grid-cols-4" />
+          <ProductGridSkeleton
+            count={6}
+            columns="grid-cols-2 sm:grid-cols-3 xl:grid-cols-4"
+          />
         </div>
       </div>
     );
@@ -78,10 +94,11 @@ export function CategoryView({ categoryId }: { categoryId: CategoryId }) {
       {/* Banner de categoría */}
       <section className="relative overflow-hidden rounded-[2rem] bg-ink shadow-card">
         {media.banner && (
-          <img
+          <LazyImage
             src={media.banner}
             alt={`Categoría ${category?.name ?? ""}`}
-            className="h-44 w-full object-cover sm:h-60"
+            priority
+            wrapperClassName="h-44 w-full bg-ink sm:h-60"
           />
         )}
         {!media.banner && <div className="h-44 w-full sm:h-60" />}
@@ -104,9 +121,9 @@ export function CategoryView({ categoryId }: { categoryId: CategoryId }) {
       {/* Móvil: hoja de filtros */}
       <div className="mt-6 flex items-center justify-between gap-3 lg:hidden">
         <p className="text-sm text-muted-foreground">
-          {productsStatus === "loading"
+          {feed.loadingInitial
             ? "Cargando prendas…"
-            : `${results.length} ${results.length === 1 ? "producto" : "productos"}`}
+            : `${totalDisplay} ${totalDisplay === 1 ? "producto" : "productos"}`}
         </p>
         <Sheet>
           <SheetTrigger asChild>
@@ -126,7 +143,7 @@ export function CategoryView({ categoryId }: { categoryId: CategoryId }) {
             </SheetHeader>
             <div className="px-1 pb-6">
               <FilterControls
-                products={categoryProducts}
+                maxPriceCeiling={maxPriceCeiling}
                 filters={filters}
                 onChange={patch}
                 onReset={reset}
@@ -141,7 +158,7 @@ export function CategoryView({ categoryId }: { categoryId: CategoryId }) {
         <aside className="hidden lg:block">
           <div className="sticky top-28">
             <FilterControls
-              products={categoryProducts}
+              maxPriceCeiling={maxPriceCeiling}
               filters={filters}
               onChange={patch}
               onReset={reset}
@@ -152,16 +169,27 @@ export function CategoryView({ categoryId }: { categoryId: CategoryId }) {
 
         <div>
           <p className="mb-5 hidden text-sm text-muted-foreground lg:block">
-            {productsStatus === "loading"
+            {feed.loadingInitial
               ? "Cargando prendas…"
-              : `${results.length} ${results.length === 1 ? "producto" : "productos"} en ${
+              : `${totalDisplay} ${totalDisplay === 1 ? "producto" : "productos"} en ${
                   category?.name ?? ""
                 }`}
           </p>
 
-          {productsStatus === "loading" && categoryProducts.length === 0 ? (
-            <ProductGridSkeleton count={6} columns="grid-cols-2 sm:grid-cols-3 xl:grid-cols-4" />
-          ) : results.length === 0 ? (
+          {feed.loadingInitial ? (
+            <ProductGridSkeleton
+              count={8}
+              columns="grid-cols-2 sm:grid-cols-3 xl:grid-cols-4"
+            />
+          ) : feed.error ? (
+            <EmptyState
+              icon={PackageSearch}
+              title="No se pudieron cargar las prendas"
+              description={feed.error}
+              ctaLabel="Reintentar"
+              onCta={feed.retry}
+            />
+          ) : feed.items.length === 0 ? (
             <EmptyState
               icon={PackageSearch}
               title="Nada por aquí"
@@ -170,11 +198,21 @@ export function CategoryView({ categoryId }: { categoryId: CategoryId }) {
               onCta={reset}
             />
           ) : (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 xl:grid-cols-4">
-              {results.map((p) => (
-                <ProductCard key={p.id} product={p} />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 xl:grid-cols-4">
+                {feed.items.map((p) => (
+                  <ProductCard key={p.id} product={p} />
+                ))}
+              </div>
+              <PaginationControls
+                page={feed.page}
+                totalPages={feed.totalPages}
+                totalItems={feed.totalItems ?? 0}
+                pageSize={feed.pageSize}
+                onPageChange={handlePageChange}
+                disabled={feed.loadingInitial}
+              />
+            </>
           )}
         </div>
       </div>

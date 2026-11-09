@@ -11,12 +11,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { priceCeiling, SORT_OPTIONS, useCategories } from "@/lib/catalog";
-import type { CategoryId, FilterState, Product, SortId } from "@/lib/types";
+import { SORT_OPTIONS, useCategories } from "@/lib/catalog";
+import type { CategoryId, FilterState, SortId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface FilterControlsProps {
-  products: Product[];
+  maxPriceCeiling?: number;
   filters: FilterState;
   onChange: (patch: Partial<FilterState>) => void;
   onReset: () => void;
@@ -43,7 +43,7 @@ function Group({
 }
 
 export function FilterControls({
-  products,
+  maxPriceCeiling = 50,
   filters,
   onChange,
   onReset,
@@ -51,8 +51,11 @@ export function FilterControls({
   className,
 }: FilterControlsProps) {
   const categories = useCategories();
-  const precioMaximo = priceCeiling(products);
-  const precioActual = filters.maxPrice > 0 ? filters.maxPrice : precioMaximo;
+  const precioMaximo = Math.max(50, maxPriceCeiling);
+  const precioActual =
+    filters.maxPrice > 0
+      ? Math.min(filters.maxPrice, precioMaximo)
+      : precioMaximo;
 
   return (
     <div className={cn("space-y-6", className)}>

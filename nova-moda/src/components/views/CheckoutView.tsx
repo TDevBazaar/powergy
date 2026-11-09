@@ -18,10 +18,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { EmptyState } from "@/components/shop/EmptyState";
+import { LazyImage } from "@/components/shop/LazyImage";
 import {
   cartSubtotal,
   hasUnpricedLines,
-  useCartLines,
+  useCartLinesState,
 } from "@/lib/catalog";
 import {
   SHIPPING_OPTIONS,
@@ -40,13 +41,13 @@ import { whatsappUrl } from "@/lib/whatsapp";
 import type { CartLine, Order } from "@/lib/types";
 
 const checkoutSchema = z.object({
-  name: z.string().min(2, "Escribe tu nombre completo"),
-  phone: z
+  address: z.string().trim().min(4, "Escribe tu dirección de entrega"),
+  notes: z
     .string()
-    .min(6, "Escribe tu número de teléfono")
-    .regex(/^[+\d][\d\s.-]{5,17}$/, "Número de teléfono no válido"),
-  address: z.string().min(4, "Escribe tu dirección de entrega"),
-  notes: z.string().max(300, "Máximo 300 caracteres").optional().or(z.literal("")),
+    .trim()
+    .max(300, "Máximo 300 caracteres")
+    .optional()
+    .or(z.literal("")),
 });
 
 type CheckoutValues = z.infer<typeof checkoutSchema>;
@@ -72,8 +73,6 @@ function buildWhatsAppMessage(
     "Hola NOVA MODA, acabo de registrar un pedido en la tienda.",
     "",
     `📋 Pedido: ${reference}`,
-    `👤 Nombre: ${values.name}`,
-    `📞 Teléfono: ${values.phone}`,
     `📍 Dirección: ${values.address}`,
     values.notes ? `📝 Notas: ${values.notes}` : null,
     "🚚 Envío: Envío estándar (confirmación hoy mismo con el precio)",
@@ -93,7 +92,7 @@ function buildWhatsAppMessage(
 }
 
 export function CheckoutView() {
-  const lines = useCartLines();
+  const { lines, pending } = useCartLinesState();
   const clearCart = useNova((s) => s.clearCart);
   const [confirmed, setConfirmed] = useState<Order | null>(null);
   const [whatsappLink, setWhatsappLink] = useState<string>("");
@@ -112,8 +111,6 @@ export function CheckoutView() {
   } = useForm<CheckoutValues>({
     resolver: zodResolver(checkoutSchema),
     defaultValues: {
-      name: "",
-      phone: "",
       address: "",
       notes: "",
     },
@@ -141,7 +138,6 @@ export function CheckoutView() {
             ¡Pedido registrado!
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-            Gracias, <span className="font-medium text-foreground">{confirmed.customer.name}</span>.
             Tu pedido <span className="font-mono font-semibold text-foreground">{confirmed.id}</span> quedó
             registrado. Te estamos redirigiendo a WhatsApp para confirmar el pago y la entrega...
           </p>
@@ -151,10 +147,6 @@ export function CheckoutView() {
               <span className="font-medium">
                 {confirmed.items.reduce((a, i) => a + i.qty, 0)}
               </span>
-            </div>
-            <div className="mt-1.5 flex justify-between">
-              <span className="text-muted-foreground">Teléfono</span>
-              <span className="font-medium">{confirmed.customer.phone}</span>
             </div>
             <div className="mt-1.5 flex justify-between">
               <span className="text-muted-foreground">Dirección</span>
@@ -201,6 +193,21 @@ export function CheckoutView() {
     );
   }
 
+  if (pending && lines.length === 0) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6 animate-pulse">
+        <div className="mb-7 space-y-2">
+          <div className="h-3 w-28 rounded-md bg-secondary" />
+          <div className="h-9 w-56 rounded-md bg-secondary" />
+        </div>
+        <div className="grid gap-8 lg:grid-cols-[1fr_380px]">
+          <div className="h-96 rounded-[1.5rem] bg-secondary/70 shadow-card" />
+          <div className="h-80 rounded-[1.5rem] bg-secondary/70 shadow-card" />
+        </div>
+      </div>
+    );
+  }
+
   if (lines.length === 0) {
     return (
       <div className="mx-auto max-w-6xl px-4 pt-8 sm:px-6">
@@ -241,8 +248,6 @@ export function CheckoutView() {
         shippingCost,
         total,
         customer: {
-          name: values.name,
-          phone: values.phone,
           address: values.address,
           notes: values.notes || undefined,
           shipping: "estandar",
@@ -295,8 +300,8 @@ export function CheckoutView() {
           Formulario de pedido
         </h1>
         <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
-          Completa tus datos: registramos tu pedido y continuamos por WhatsApp
-          para confirmar el pago y la entrega.
+          Indica tu dirección de entrega: registramos tu pedido y continuamos
+          por WhatsApp para confirmar el pago y la entrega.
         </p>
       </header>
 
@@ -310,29 +315,8 @@ export function CheckoutView() {
                 <BadgeCheck className="h-4.5 w-4.5 text-camel-deep" />
                 Datos de entrega
               </h2>
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <div className="mt-5 grid gap-4">
                 <div>
-                  <Label htmlFor="name">Nombre completo *</Label>
-                  <Input
-                    id="name"
-                    placeholder="Ana García"
-                    className="mt-1.5 h-11 rounded-2xl border-input bg-background"
-                    {...register("name")}
-                  />
-                  {fieldError(errors.name?.message)}
-                </div>
-                <div>
-                  <Label htmlFor="phone">Número de teléfono *</Label>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    placeholder="+34 600 000 000"
-                    className="mt-1.5 h-11 rounded-2xl border-input bg-background"
-                    {...register("phone")}
-                  />
-                  {fieldError(errors.phone?.message)}
-                </div>
-                <div className="sm:col-span-2">
                   <Label htmlFor="address">Dirección de entrega *</Label>
                   <Input
                     id="address"
@@ -342,7 +326,7 @@ export function CheckoutView() {
                   />
                   {fieldError(errors.address?.message)}
                 </div>
-                <div className="sm:col-span-2">
+                <div>
                   <Label htmlFor="notes">Notas para el repartidor (opcional)</Label>
                   <Textarea
                     id="notes"
@@ -402,10 +386,11 @@ export function CheckoutView() {
                 {lines.map((l) => (
                   <li key={`${l.productId}`} className="flex items-center gap-3">
                     <span className="relative shrink-0">
-                      <img
+                      <LazyImage
                         src={l.product.images[0]}
                         alt={l.product.name}
-                        className="h-14 w-12 rounded-xl object-cover"
+                        fallbackIconSize="sm"
+                        wrapperClassName="h-14 w-12 rounded-xl"
                       />
                       <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-foreground px-1 text-[10px] font-semibold text-background">
                         {l.qty}

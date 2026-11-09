@@ -2,29 +2,20 @@
 
 import { ArrowRight, Search, ShoppingBag, Sparkles, Truck, Undo2 } from "lucide-react";
 import { CategoryCard } from "@/components/shop/CategoryCard";
+import { LazyImage } from "@/components/shop/LazyImage";
 import { ProductCard } from "@/components/shop/ProductCard";
 import { SectionTitle } from "@/components/shop/Bits";
 import { CategoryGridSkeleton, ProductGridSkeleton } from "@/components/shop/Skeletons";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { useCatalog, useCategories, useCategoriesStatus, useProductsStatus } from "@/lib/catalog";
+import { useCategories, useCategoriesStatus, useHomeCatalog } from "@/lib/catalog";
 import { formatPriceLabel } from "@/lib/format";
 import { href, navigate } from "@/lib/router";
 
 export function HomeView() {
-  const catalog = useCatalog();
   const categories = useCategories();
   const categoriesStatus = useCategoriesStatus();
-  const productsStatus = useProductsStatus();
-
-  const featured = catalog.filter((p) => p.featured).slice(0, 8);
-  const news = [...catalog]
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-    .slice(0, 6);
-  const promo =
-    catalog.find((p) => p.badge === "oferta") ??
-    catalog.find((p) => p.featured) ??
-    catalog[0];
+  const { featured, news, promo, status: homeStatus } = useHomeCatalog();
 
   return (
     <div className="mx-auto max-w-6xl px-4 pb-16 sm:px-6">
@@ -70,10 +61,11 @@ export function HomeView() {
 
           <div className="relative order-1 lg:order-2">
             <div className="relative mx-auto aspect-[4/5] w-full max-w-md overflow-hidden rounded-[1.8rem] shadow-soft sm:aspect-[5/5]">
-              <img
+              <LazyImage
                 src="/images/products/30cae5992ef4.jpg"
                 alt="Editorial de moda NOVA MODA"
-                className="h-full w-full object-cover"
+                priority
+                wrapperClassName="h-full w-full"
               />
             </div>
             {promo && (
@@ -82,10 +74,12 @@ export function HomeView() {
                 onClick={() => navigate(`/producto/${promo.id}`)}
                 className="absolute -bottom-4 left-2 flex items-center gap-3 rounded-3xl bg-card p-3 pr-5 text-left shadow-soft transition hover:scale-[1.02] sm:left-6"
               >
-                <img
+                <LazyImage
                   src={promo.images[0]}
                   alt={promo.name}
-                  className="h-14 w-14 rounded-2xl object-cover"
+                  priority
+                  fallbackIconSize="sm"
+                  wrapperClassName="h-14 w-14 shrink-0 rounded-2xl"
                 />
                 <span>
                   <span className="block text-[13px] font-semibold">
@@ -114,7 +108,7 @@ export function HomeView() {
             </a>
           }
         />
-        {categoriesStatus === "loading" && categories.length === 0 ? (
+        {(categoriesStatus === "idle" || categoriesStatus === "loading") && categories.length === 0 ? (
           <CategoryGridSkeleton count={3} />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -138,7 +132,7 @@ export function HomeView() {
           Buscar sudadera, gabardina, bolso…
         </button>
 
-        {productsStatus === "loading" && featured.length === 0 ? (
+        {(homeStatus === "idle" || homeStatus === "loading") && featured.length === 0 ? (
           <ProductGridSkeleton count={8} />
         ) : (
           <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 lg:grid-cols-4">
@@ -162,7 +156,7 @@ export function HomeView() {
             </a>
           }
         />
-        {productsStatus === "loading" && news.length === 0 ? (
+        {(homeStatus === "idle" || homeStatus === "loading") && news.length === 0 ? (
           <ProductGridSkeleton count={4} columns="grid-cols-2 sm:grid-cols-4" />
         ) : (
           <div className="no-scrollbar -mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
@@ -233,11 +227,11 @@ export function HomeView() {
             href={href(block.to)}
             className="group relative flex h-56 items-end overflow-hidden rounded-[1.8rem] shadow-card sm:h-64"
           >
-            <img
+            <LazyImage
               src={block.image}
               alt={block.title}
-              loading="lazy"
-              className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+              wrapperClassName="absolute inset-0 h-full w-full"
+              className="group-hover:scale-105"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
             <div className="relative flex w-full items-center justify-between p-6">

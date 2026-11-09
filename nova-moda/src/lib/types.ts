@@ -37,7 +37,7 @@ export interface CartLine extends CartItem {
 export type ShippingMethod = "estandar" | "express" | "recogida";
 
 export interface OrderCustomer {
-  name: string;
+  name?: string;
   email?: string;
   phone?: string;
   address: string;

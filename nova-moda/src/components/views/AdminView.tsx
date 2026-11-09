@@ -34,6 +34,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { LazyImage } from "@/components/shop/LazyImage";
 import { QuantityStepper } from "@/components/shop/QuantityStepper";
 import { formatDate, formatPrice, formatPriceLabel } from "@/lib/format";
 import { slugify, type ApiCategory, type ApiProduct } from "@/lib/powergy-api";
@@ -870,13 +871,14 @@ export function AdminView() {
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
                         {p.primary_image ? (
-                          <img
+                          <LazyImage
                             src={p.primary_image}
                             alt=""
-                            className="h-12 w-10 rounded-lg object-cover"
+                            fallbackIconSize="sm"
+                            wrapperClassName="h-12 w-10 shrink-0 rounded-lg"
                           />
                         ) : (
-                          <span className="h-12 w-10 rounded-lg bg-secondary" />
+                          <span className="h-12 w-10 shrink-0 rounded-lg bg-secondary" />
                         )}
                         <div className="min-w-0">
                           <p className="truncate font-medium">{p.name}</p>
@@ -945,13 +947,14 @@ export function AdminView() {
                 className="flex items-center gap-3 rounded-[1.3rem] bg-card p-3.5 shadow-card"
               >
                 {p.primary_image ? (
-                  <img
+                  <LazyImage
                     src={p.primary_image}
                     alt=""
-                    className="h-16 w-14 rounded-xl object-cover"
+                    fallbackIconSize="sm"
+                    wrapperClassName="h-16 w-14 shrink-0 rounded-xl"
                   />
                 ) : (
-                  <span className="h-16 w-14 rounded-xl bg-secondary" />
+                  <span className="h-16 w-14 shrink-0 rounded-xl bg-secondary" />
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold">{p.name}</p>
@@ -1301,13 +1304,15 @@ export function AdminView() {
               <Label htmlFor="p-image">Imagen *</Label>
               <div className="mt-1.5 flex items-center gap-3">
                 {formProducto.image ? (
-                  <img
+                  <LazyImage
                     src={formProducto.image}
                     alt=""
-                    className="h-16 w-14 rounded-xl object-cover"
+                    priority
+                    fallbackIconSize="sm"
+                    wrapperClassName="h-16 w-14 shrink-0 rounded-xl"
                   />
                 ) : (
-                  <span className="h-16 w-14 rounded-xl bg-secondary" />
+                  <span className="h-16 w-14 shrink-0 rounded-xl bg-secondary" />
                 )}
                 <div className="flex-1 space-y-2">
                   <Input

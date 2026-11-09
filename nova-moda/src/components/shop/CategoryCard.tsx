@@ -1,22 +1,20 @@
 "use client";
 
-import { useState } from "react";
 import { ChevronRight } from "lucide-react";
+import { LazyImage } from "@/components/shop/LazyImage";
 import { href } from "@/lib/router";
-import { useCatalog } from "@/lib/catalog";
+import { useCategoryPreviewImage } from "@/lib/catalog";
 import { categoryMedia } from "@/lib/category-media";
 import type { Category } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
 /** Tarjeta de categoría estilo referencia: etiqueta a la izquierda, imagen a la derecha */
 export function CategoryCard({ category }: { category: Category }) {
-  const [imgLoaded, setImgLoaded] = useState(false);
-  const catalog = useCatalog();
   const media = categoryMedia(category.slug);
-  const image =
-    media.image ??
-    catalog.find((p) => p.category === category.slug)?.image ??
-    "";
+  const fallbackPreview = useCategoryPreviewImage(
+    category.slug,
+    Boolean(media.image)
+  );
+  const image = media.image ?? fallbackPreview;
 
   return (
     <a
@@ -37,19 +35,12 @@ export function CategoryCard({ category }: { category: Category }) {
         </span>
       </div>
       <div className="relative h-24 w-28 shrink-0 overflow-hidden rounded-2xl bg-secondary sm:h-28 sm:w-36">
-        {!imgLoaded && image ? (
-          <div className="absolute inset-0 animate-pulse bg-secondary/80" />
-        ) : null}
         {image ? (
-          <img
+          <LazyImage
             src={image}
             alt={category.name}
-            loading="lazy"
-            onLoad={() => setImgLoaded(true)}
-            className={cn(
-              "h-full w-full object-cover transition-all duration-700 group-hover:scale-105",
-              imgLoaded ? "opacity-100 scale-100" : "opacity-0 scale-95"
-            )}
+            wrapperClassName="h-full w-full"
+            className="group-hover:scale-105"
           />
         ) : (
           <div className="h-full w-full bg-secondary/50" />

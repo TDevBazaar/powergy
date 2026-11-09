@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { Heart, ShoppingBag } from "lucide-react";
+import { Heart, ShoppingBag, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
-import { href } from "@/lib/router";
+import { LazyImage } from "@/components/shop/LazyImage";
+import { useCatalogStore } from "@/lib/catalog";
 import { formatPriceLabel } from "@/lib/format";
+import { href, navigate } from "@/lib/router";
 import { useNova } from "@/lib/store";
 import type { Product } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -25,21 +26,34 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product, className }: ProductCardProps) {
-  const [imgLoaded, setImgLoaded] = useState(false);
   const toggleFavorite = useNova((s) => s.toggleFavorite);
   const addToCart = useNova((s) => s.addToCart);
   const isFavorite = useNova((s) => s.favorites.includes(product.id));
+  const cartQty = useNova(
+    (s) => s.cart.find((item) => item.productId === product.id)?.qty ?? 0
+  );
   const sinPrecio = !(product.price > 0);
 
   const quickAdd = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    useCatalogStore.getState().registerProducts([product]);
     addToCart({ productId: product.id, qty: 1 });
     toast.success(`Añadido al carrito: ${product.name}`, {
       description: sinPrecio
         ? "El precio se confirma por WhatsApp."
         : `${formatPriceLabel(product.price)} · unidad`,
     });
+  };
+
+  const orderNow = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    useCatalogStore.getState().registerProducts([product]);
+    if (cartQty === 0) {
+      addToCart({ productId: product.id, qty: 1 });
+    }
+    navigate("/pedido");
   };
 
   return (
@@ -50,21 +64,13 @@ export function ProductCard({ product, className }: ProductCardProps) {
         aria-label={`Ver ${product.name}`}
       >
         <div className="relative overflow-hidden rounded-[1.6rem] bg-secondary aspect-[3/4] shadow-card">
-          {!imgLoaded && (
-            <div className="absolute inset-0 animate-pulse bg-secondary/80 flex items-center justify-center">
-              <span className="h-6 w-6 rounded-full bg-muted-foreground/10" />
-            </div>
-          )}
           {product.image ? (
-            <img
+            <LazyImage
               src={product.image}
               alt={product.name}
-              loading="lazy"
-              onLoad={() => setImgLoaded(true)}
-              className={cn(
-                "h-full w-full object-cover transition-all duration-700 ease-out group-hover:scale-[1.06]",
-                imgLoaded ? "opacity-100 scale-100" : "opacity-0 scale-95"
-              )}
+              showPulseDot
+              wrapperClassName="h-full w-full"
+              className="group-hover:scale-[1.06]"
             />
           ) : null}
 
@@ -104,15 +110,36 @@ export function ProductCard({ product, className }: ProductCardProps) {
             />
           </button>
 
-          {/* Añadir rápido (hover desktop / visible en táctil) */}
-          <button
-            type="button"
-            onClick={quickAdd}
-            className="absolute inset-x-3 bottom-3 flex h-10 items-center justify-center gap-2 rounded-full bg-primary text-sm font-medium text-primary-foreground opacity-100 shadow-card transition-all duration-300 hover:bg-foreground/90 md:translate-y-14 md:opacity-0 md:group-hover:translate-y-0 md:group-hover:opacity-100"
-          >
-            <ShoppingBag className="h-4 w-4" />
-            Añadir
-          </button>
+          {/* Acciones rápidas: pedir directo o agregar al carrito */}
+          <div className="absolute inset-x-3 bottom-3 flex items-center gap-2 opacity-100 transition-all duration-300 md:translate-y-14 md:opacity-0 md:group-hover:translate-y-0 md:group-hover:opacity-100 md:group-focus-within:translate-y-0 md:group-focus-within:opacity-100">
+            <button
+              type="button"
+              onClick={orderNow}
+              className="flex h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-full bg-primary px-3 text-sm font-medium text-primary-foreground shadow-card transition hover:bg-foreground/90"
+            >
+              <ShoppingBag className="h-4 w-4 shrink-0" />
+              <span className="truncate">Pedir</span>
+            </button>
+            <button
+              type="button"
+              onClick={quickAdd}
+              aria-label={`Agregar ${product.name} al carrito`}
+              title="Agregar al carrito"
+              className={cn(
+                "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full shadow-card backdrop-blur transition hover:scale-105",
+                cartQty > 0
+                  ? "bg-camel text-white"
+                  : "bg-background/95 text-foreground hover:bg-background"
+              )}
+            >
+              <ShoppingCart className="h-4 w-4" />
+              {cartQty > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-foreground px-1 text-[10px] font-semibold leading-none text-background shadow-card">
+                  {cartQty > 9 ? "9+" : cartQty}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
 
         <div className="mt-3 px-1">

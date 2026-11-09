@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
-import { Search, SlidersHorizontal, PackageSearch } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { PackageSearch, Search, SlidersHorizontal } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -14,14 +14,20 @@ import { ProductCard } from "@/components/shop/ProductCard";
 import { ProductGridSkeleton } from "@/components/shop/Skeletons";
 import { EmptyState } from "@/components/shop/EmptyState";
 import { FilterControls } from "@/components/shop/FilterControls";
+import { CatalogFeedFooter } from "@/components/shop/CatalogFeedFooter";
 import { useFilterState } from "@/components/shop/useFilterState";
-import { activeFilterCount, applyFilters, searchProducts, useCatalog, useCategories, useProductsStatus } from "@/lib/catalog";
+import {
+  activeFilterCount,
+  priceCeilingFromMax,
+  useCatalogMeta,
+  useCategories,
+} from "@/lib/catalog";
+import { useCatalogFeed } from "@/lib/useCatalogFeed";
 import { navigate } from "@/lib/router";
 
 export function SearchView({ initialQuery }: { initialQuery: string }) {
-  const catalog = useCatalog();
   const categories = useCategories();
-  const productsStatus = useProductsStatus();
+  const meta = useCatalogMeta();
   const { filters, patch, reset } = useFilterState({ q: initialQuery });
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -29,10 +35,24 @@ export function SearchView({ initialQuery }: { initialQuery: string }) {
     patch({ q: initialQuery });
   }, [initialQuery, patch]);
 
-  /* Sugerencias reales de la tienda: categorías y etiquetas del catálogo */
+  const feed = useCatalogFeed({
+    filters,
+    pageSize: 20,
+    cursorLimit: 12,
+  });
+
+  const handlePageChange = useCallback(
+    (nextPage: number) => {
+      feed.setPage(nextPage);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    },
+    [feed]
+  );
+
+  /* Sugerencias reales de la tienda: categorías y etiquetas visibles */
   const populares = useMemo(() => {
     const cuenta = new Map<string, number>();
-    for (const p of catalog) {
+    for (const p of feed.items) {
       for (const t of p.tags) {
         const clave = t.trim().toLowerCase();
         if (!clave || clave === "nova moda" || clave === "general") continue;
@@ -47,19 +67,19 @@ export function SearchView({ initialQuery }: { initialQuery: string }) {
       0,
       7
     );
-  }, [catalog, categories]);
+  }, [feed.items, categories]);
 
-  const results = useMemo(
-    () => applyFilters(searchProducts(catalog, filters.q), filters),
-    [catalog, filters]
-  );
   const activeCount = activeFilterCount(filters);
+  const maxPriceCeiling = priceCeilingFromMax(meta?.maxPriceUsd);
   const hasQuery = filters.q.trim().length > 0;
+  const totalDisplay = feed.totalItems ?? feed.items.length;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const q = inputRef.current?.value.trim() ?? "";
-    navigate(`/buscar${q ? `?q=${encodeURIComponent(q)}` : ""}`, { replace: true });
+    navigate(`/buscar${q ? `?q=${encodeURIComponent(q)}` : ""}`, {
+      replace: true,
+    });
   };
 
   return (
@@ -103,7 +123,11 @@ export function SearchView({ initialQuery }: { initialQuery: string }) {
           <button
             key={term}
             type="button"
-            onClick={() => navigate(`/buscar?q=${encodeURIComponent(term)}`, { replace: true })}
+            onClick={() =>
+              navigate(`/buscar?q=${encodeURIComponent(term)}`, {
+                replace: true,
+              })
+            }
             className="rounded-full bg-secondary px-3.5 py-1.5 text-xs font-medium text-secondary-foreground transition hover:bg-accent"
           >
             {term}
@@ -114,7 +138,9 @@ export function SearchView({ initialQuery }: { initialQuery: string }) {
       {/* Móvil: filtros */}
       <div className="mb-6 mt-8 flex items-center justify-between gap-3 lg:hidden">
         <p className="text-sm text-muted-foreground">
-          {results.length} {results.length === 1 ? "resultado" : "resultados"}
+          {feed.loadingInitial
+            ? "Buscando productos…"
+            : `${totalDisplay} ${totalDisplay === 1 ? "resultado" : "resultados"}`}
         </p>
         <Sheet>
           <SheetTrigger asChild>
@@ -134,7 +160,7 @@ export function SearchView({ initialQuery }: { initialQuery: string }) {
             </SheetHeader>
             <div className="px-1 pb-6">
               <FilterControls
-                products={catalog}
+                maxPriceCeiling={maxPriceCeiling}
                 filters={filters}
                 onChange={patch}
                 onReset={reset}
@@ -148,7 +174,7 @@ export function SearchView({ initialQuery }: { initialQuery: string }) {
         <aside className="hidden lg:block">
           <div className="sticky top-28">
             <FilterControls
-              products={catalog}
+              maxPriceCeiling={maxPriceCeiling}
               filters={filters}
               onChange={patch}
               onReset={reset}
@@ -158,21 +184,32 @@ export function SearchView({ initialQuery }: { initialQuery: string }) {
 
         <div>
           <p className="mb-5 hidden text-sm text-muted-foreground lg:block">
-            {hasQuery ? (
+            {feed.loadingInitial ? (
+              "Buscando productos…"
+            ) : hasQuery ? (
               <>
-                Resultados para <span className="font-semibold text-foreground">“{filters.q}”</span> —{" "}
-                {results.length}
+                Resultados para{" "}
+                <span className="font-semibold text-foreground">“{filters.q}”</span>{" "}
+                — {totalDisplay}
               </>
             ) : (
-              <>{results.length} productos · escribe arriba para filtrar por texto</>
+              <>{totalDisplay} productos · escribe arriba para filtrar por texto</>
             )}
           </p>
-          {productsStatus === "loading" && catalog.length === 0 ? (
+          {feed.loadingInitial ? (
             <ProductGridSkeleton
               count={8}
               columns="grid-cols-2 sm:grid-cols-3 xl:grid-cols-4"
             />
-          ) : results.length === 0 ? (
+          ) : feed.error ? (
+            <EmptyState
+              icon={PackageSearch}
+              title="No se pudo completar la búsqueda"
+              description={feed.error}
+              ctaLabel="Reintentar"
+              onCta={feed.retry}
+            />
+          ) : feed.items.length === 0 ? (
             <EmptyState
               icon={PackageSearch}
               title={hasQuery ? `Sin resultados para “${filters.q}”` : "Nada encontrado"}
@@ -181,11 +218,28 @@ export function SearchView({ initialQuery }: { initialQuery: string }) {
               onCta={reset}
             />
           ) : (
-            <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 xl:grid-cols-4">
-              {results.map((p) => (
-                <ProductCard key={p.id} product={p} />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 xl:grid-cols-4">
+                {feed.items.map((p) => (
+                  <ProductCard key={p.id} product={p} />
+                ))}
+              </div>
+              <CatalogFeedFooter
+                isPaginated={feed.isPaginated}
+                page={feed.page}
+                totalPages={feed.totalPages}
+                totalItems={feed.totalItems}
+                pageSize={feed.pageSize}
+                hasMore={feed.hasMore}
+                itemCount={feed.items.length}
+                loadingInitial={feed.loadingInitial}
+                loadingMore={feed.loadingMore}
+                loadMoreError={feed.loadMoreError}
+                onPageChange={handlePageChange}
+                onRetryMore={feed.retry}
+                sentinelRef={feed.sentinelRef}
+              />
+            </>
           )}
         </div>
       </div>

@@ -3,15 +3,16 @@
 import { Heart } from "lucide-react";
 import { ProductCard } from "@/components/shop/ProductCard";
 import { EmptyState } from "@/components/shop/EmptyState";
+import { ProductGridSkeleton } from "@/components/shop/Skeletons";
 import { SectionTitle } from "@/components/shop/Bits";
-import { useCatalog, productById } from "@/lib/catalog";
+import { useProductsByIds } from "@/lib/catalog";
 import { useNova } from "@/lib/store";
 
 export function FavoritesView() {
-  const catalog = useCatalog();
   const favorites = useNova((s) => s.favorites);
+  const { productsById, pending } = useProductsByIds(favorites);
   const favProducts = favorites
-    .map((id) => productById(catalog, id))
+    .map((id) => productsById[id])
     .filter((p): p is NonNullable<typeof p> => Boolean(p));
 
   return (
@@ -29,7 +30,9 @@ export function FavoritesView() {
         </p>
       </header>
 
-      {favProducts.length === 0 ? (
+      {pending && favProducts.length === 0 ? (
+        <ProductGridSkeleton count={Math.min(Math.max(favorites.length, 1), 4)} />
+      ) : favProducts.length === 0 ? (
         <EmptyState
           icon={Heart}
           title="Aún no tienes favoritos"

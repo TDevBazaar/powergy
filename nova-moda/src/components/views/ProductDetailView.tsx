@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Heart,
@@ -16,40 +16,88 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { ProductCard } from "@/components/shop/ProductCard";
+import { LazyImage } from "@/components/shop/LazyImage";
 import { QuantityStepper } from "@/components/shop/QuantityStepper";
 import { SectionTitle } from "@/components/shop/Bits";
 import { EmptyState } from "@/components/shop/EmptyState";
-import { useCatalog, useProductsStatus, productById } from "@/lib/catalog";
+import {
+  useCatalogStore,
+  useCategoryMap,
+  useProductById,
+} from "@/lib/catalog";
+import { fetchProductsPage } from "@/lib/powergy-api";
 import { categoryMedia } from "@/lib/category-media";
 import { formatPriceLabel } from "@/lib/format";
 import { href, navigate } from "@/lib/router";
 import { useNova } from "@/lib/store";
+import type { Product } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 export function ProductDetailView({ productId }: { productId: string }) {
-  const catalog = useCatalog();
-  const productsStatus = useProductsStatus();
-  const product = productById(catalog, productId);
+  const { product, loading: productLoading } = useProductById(productId);
+  const categoryMap = useCategoryMap();
+  const categoryMapRef = useRef(categoryMap);
 
-  const [qty, setQty] = useState(1);
-  const [imgIndex, setImgIndex] = useState(0);
+  useEffect(() => {
+    categoryMapRef.current = categoryMap;
+  }, [categoryMap]);
+
+  const [qtyState, setQtyState] = useState({ forId: productId, value: 1 });
+  const [imgState, setImgState] = useState({ forId: productId, index: 0 });
+  const qty = qtyState.forId === productId ? qtyState.value : 1;
+  const imgIndex = imgState.forId === productId ? imgState.index : 0;
+
+  const setQty = (value: number) => setQtyState({ forId: productId, value });
+  const setImgIndex = (index: number) =>
+    setImgState({ forId: productId, index });
 
   const toggleFavorite = useNova((s) => s.toggleFavorite);
   const addToCart = useNova((s) => s.addToCart);
-  const isFavorite = useNova((s) => s.favorites.includes(productId));
-
-  const related = useMemo(
-    () =>
-      product
-        ? catalog
-            .filter((p) => p.category === product.category && p.id !== product.id)
-            .slice(0, 4)
-        : [],
-    [catalog, product]
+  const isFavorite = useNova((s) =>
+    s.favorites.includes(product?.id ?? productId)
   );
 
-  if (productsStatus === "loading" && !product) {
+  const [relatedState, setRelatedState] = useState<{
+    forId: string;
+    items: Product[];
+  }>({ forId: "", items: [] });
+
+  useEffect(() => {
+    if (!product) return;
+    const controller = new AbortController();
+
+    fetchProductsPage(
+      {
+        categories: [product.category],
+        page: 1,
+        pageSize: 5,
+        sort: "destacados",
+      },
+      categoryMapRef.current,
+      controller.signal
+    )
+      .then((res) => {
+        if (controller.signal.aborted) return;
+        useCatalogStore.getState().registerProducts(res.items);
+        setRelatedState({
+          forId: product.id,
+          items: res.items.filter((p) => p.id !== product.id).slice(0, 4),
+        });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setRelatedState({ forId: product.id, items: [] });
+        }
+      });
+
+    return () => controller.abort();
+  }, [product]);
+
+  const related =
+    product && relatedState.forId === product.id ? relatedState.items : [];
+
+  if (productLoading && !product) {
     return (
       <div className="mx-auto max-w-6xl px-4 pb-16 pt-6 sm:px-6 animate-pulse">
         <div className="h-10 w-24 rounded-full bg-secondary mb-6" />
@@ -125,11 +173,13 @@ export function ProductDetailView({ productId }: { productId: string }) {
         <div>
           <div className="relative overflow-hidden rounded-[2rem] bg-secondary aspect-[4/5] shadow-card">
             {product.images.length > 0 ? (
-              <img
+              <LazyImage
                 key={imgIndex}
                 src={product.images[imgIndex]}
                 alt={`${product.name} — imagen ${imgIndex + 1}`}
-                className="h-full w-full object-cover"
+                priority
+                showPulseDot
+                wrapperClassName="h-full w-full"
               />
             ) : null}
           </div>
@@ -148,7 +198,12 @@ export function ProductDetailView({ productId }: { productId: string }) {
                       : "border-transparent opacity-70 hover:opacity-100"
                   )}
                 >
-                  <img src={src} alt="" className="h-full w-full object-cover" />
+                  <LazyImage
+                    src={src}
+                    alt=""
+                    fallbackIconSize="sm"
+                    wrapperClassName="h-full w-full"
+                  />
                 </button>
               ))}
             </div>

@@ -3,6 +3,7 @@
 import { ShoppingBag, Trash2, Truck } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import { LazyImage } from "@/components/shop/LazyImage";
 import { QuantityStepper } from "@/components/shop/QuantityStepper";
 import { EmptyState } from "@/components/shop/EmptyState";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,7 @@ import { toast } from "sonner";
 import {
   cartSubtotal,
   hasUnpricedLines,
-  useCartLines,
+  useCartLinesState,
 } from "@/lib/catalog";
 import {
   formatPrice,
@@ -20,13 +21,32 @@ import { href } from "@/lib/router";
 import { useNova } from "@/lib/store";
 
 export function CartView() {
-  const lines = useCartLines();
+  const { lines, pending } = useCartLinesState();
   const setQty = useNova((s) => s.setQty);
   const removeItem = useNova((s) => s.removeItem);
   const clearCart = useNova((s) => s.clearCart);
 
   const subtotal = cartSubtotal(lines);
   const sinPrecio = hasUnpricedLines(lines);
+
+  if (pending && lines.length === 0) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6 animate-pulse">
+        <div className="mb-7 space-y-2">
+          <div className="h-3 w-24 rounded-md bg-secondary" />
+          <div className="h-9 w-40 rounded-md bg-secondary" />
+        </div>
+        <div className="grid gap-8 lg:grid-cols-[1fr_380px]">
+          <div className="space-y-4">
+            {[0, 1].map((idx) => (
+              <div key={idx} className="h-36 rounded-[1.5rem] bg-secondary/70 shadow-card" />
+            ))}
+          </div>
+          <div className="h-80 rounded-[1.5rem] bg-secondary/70 shadow-card" />
+        </div>
+      </div>
+    );
+  }
 
   if (lines.length === 0) {
     return (
@@ -83,10 +103,11 @@ export function CartView() {
                 className="h-28 w-24 shrink-0 overflow-hidden rounded-2xl bg-secondary sm:h-32 sm:w-28"
               >
                 {line.product.image ? (
-                  <img
+                  <LazyImage
                     src={line.product.image}
                     alt={line.product.name}
-                    className="h-full w-full object-cover"
+                    fallbackIconSize="sm"
+                    wrapperClassName="h-full w-full"
                   />
                 ) : null}
               </a>
