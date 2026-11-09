@@ -40,7 +40,7 @@ export interface OrderCustomer {
   name?: string;
   email?: string;
   phone?: string;
-  address: string;
+  address?: string;
   city?: string;
   zip?: string;
   notes?: string;

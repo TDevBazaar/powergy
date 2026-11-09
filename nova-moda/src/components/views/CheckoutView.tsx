@@ -1,31 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { useEffect, useState, type FormEvent } from "react";
 import {
-  BadgeCheck,
   ClipboardList,
   MessageCircle,
   PartyPopper,
   ShoppingBag,
-  Truck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import {
+  ImagePreviewModal,
+  ZoomableThumb,
+  type PreviewImageData,
+} from "@/components/admin/ImagePreviewModal";
 import { EmptyState } from "@/components/shop/EmptyState";
-import { LazyImage } from "@/components/shop/LazyImage";
 import {
   cartSubtotal,
   hasUnpricedLines,
   useCartLinesState,
 } from "@/lib/catalog";
 import {
-  SHIPPING_OPTIONS,
   formatPrice,
   formatPriceLabel,
   shippingCostFor,
@@ -40,22 +35,9 @@ import {
 import { whatsappUrl } from "@/lib/whatsapp";
 import type { CartLine, Order } from "@/lib/types";
 
-const checkoutSchema = z.object({
-  address: z.string().trim().min(4, "Escribe tu dirección de entrega"),
-  notes: z
-    .string()
-    .trim()
-    .max(300, "Máximo 300 caracteres")
-    .optional()
-    .or(z.literal("")),
-});
-
-type CheckoutValues = z.infer<typeof checkoutSchema>;
-
 /** Mensaje de WhatsApp con el detalle del pedido y enlace directo para el admin */
 function buildWhatsAppMessage(
   reference: string,
-  values: CheckoutValues,
   lines: CartLine[],
   subtotal: number,
   adminUrl: string
@@ -70,12 +52,9 @@ function buildWhatsAppMessage(
     .join("\n");
 
   return [
-    "Hola NOVA MODA, acabo de registrar un pedido en la tienda.",
+    "Hola NOVA MODA, estoy interesado en estos productos.",
     "",
     `📋 Pedido: ${reference}`,
-    `📍 Dirección: ${values.address}`,
-    values.notes ? `📝 Notas: ${values.notes}` : null,
-    "🚚 Envío: Envío estándar (confirmación hoy mismo con el precio)",
     "",
     "Artículos:",
     detalle,
@@ -84,11 +63,9 @@ function buildWhatsAppMessage(
     "Envío: Por confirmar vía WhatsApp",
     `Total productos: ${formatPrice(subtotal)}`,
     "",
-    `🔗 Enlace directo al pedido (Admin):`,
+    "🔗 Enlace directo al pedido (Admin):",
     adminUrl,
-  ]
-    .filter((line): line is string => line !== null)
-    .join("\n");
+  ].join("\n");
 }
 
 export function CheckoutView() {
@@ -98,23 +75,12 @@ export function CheckoutView() {
   const [whatsappLink, setWhatsappLink] = useState<string>("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
+  const [previewImage, setPreviewImage] = useState<PreviewImageData | null>(null);
 
   const subtotal = cartSubtotal(lines);
   const sinPrecio = hasUnpricedLines(lines);
   const shippingCost = shippingCostFor(subtotal, "estandar");
   const total = subtotal + shippingCost;
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<CheckoutValues>({
-    resolver: zodResolver(checkoutSchema),
-    defaultValues: {
-      address: "",
-      notes: "",
-    },
-  });
 
   // Redirigir automáticamente a WhatsApp en cuanto se confirma el pedido
   useEffect(() => {
@@ -138,20 +104,18 @@ export function CheckoutView() {
             ¡Pedido registrado!
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-            Tu pedido <span className="font-mono font-semibold text-foreground">{confirmed.id}</span> quedó
-            registrado. Te estamos redirigiendo a WhatsApp para confirmar el pago y la entrega...
+            Tu pedido{" "}
+            <span className="font-mono font-semibold text-foreground">
+              {confirmed.id}
+            </span>{" "}
+            quedó registrado. Te estamos redirigiendo a WhatsApp para confirmar el
+            pago y la entrega...
           </p>
           <div className="mt-6 rounded-2xl bg-secondary/70 p-4 text-left text-sm">
             <div className="flex items-baseline justify-between gap-3">
               <span className="shrink-0 text-muted-foreground">Artículos</span>
               <span className="text-right font-medium">
                 {confirmed.items.reduce((a, i) => a + i.qty, 0)}
-              </span>
-            </div>
-            <div className="mt-1.5 flex items-baseline justify-between gap-3">
-              <span className="shrink-0 text-muted-foreground">Dirección</span>
-              <span className="min-w-0 break-words text-right font-medium">
-                {confirmed.customer.address}
               </span>
             </div>
             <div className="mt-1.5 flex items-baseline justify-between gap-3">
@@ -162,7 +126,9 @@ export function CheckoutView() {
             </div>
             <div className="mt-1.5 flex items-baseline justify-between gap-3">
               <span className="shrink-0 text-muted-foreground">Total</span>
-              <span className="text-right font-bold">{formatPrice(confirmed.total)}</span>
+              <span className="text-right font-bold">
+                {formatPrice(confirmed.total)}
+              </span>
             </div>
           </div>
           <div className="mt-7 flex flex-col gap-2.5 sm:flex-row sm:justify-center">
@@ -182,7 +148,9 @@ export function CheckoutView() {
           </div>
           <button
             type="button"
-            onClick={() => navigate(`/admin?order=${encodeURIComponent(confirmed.id)}`)}
+            onClick={() =>
+              navigate(`/admin?order=${encodeURIComponent(confirmed.id)}`)
+            }
             className="mt-5 inline-flex items-center gap-1.5 text-[12px] text-muted-foreground transition hover:text-foreground"
           >
             <ClipboardList className="h-3.5 w-3.5" />
@@ -195,15 +163,12 @@ export function CheckoutView() {
 
   if (pending && lines.length === 0) {
     return (
-      <div className="mx-auto max-w-6xl px-4 pb-16 pt-6 sm:px-6 sm:pt-8 animate-pulse">
+      <div className="mx-auto max-w-2xl px-4 pb-16 pt-6 sm:px-6 sm:pt-8 animate-pulse">
         <div className="mb-6 space-y-2 sm:mb-7">
           <div className="h-3 w-28 rounded-md bg-secondary" />
           <div className="h-9 w-56 rounded-md bg-secondary" />
         </div>
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-8">
-          <div className="h-96 min-w-0 rounded-[1.5rem] bg-secondary/70 shadow-card" />
-          <div className="h-80 min-w-0 rounded-[1.5rem] bg-secondary/70 shadow-card" />
-        </div>
+        <div className="h-96 rounded-[1.5rem] bg-secondary/70 shadow-card" />
       </div>
     );
   }
@@ -214,7 +179,7 @@ export function CheckoutView() {
         <EmptyState
           icon={ShoppingBag}
           title="No hay nada que pedir"
-          description="Tu carrito está vacío. Añade algunos productos antes de completar el formulario de pedido."
+          description="Tu carrito está vacío. Añade algunos productos antes de completar el pedido."
           ctaLabel="Ir al catálogo"
           ctaHref="/catalogo"
         />
@@ -222,7 +187,8 @@ export function CheckoutView() {
     );
   }
 
-  const onSubmit = async (values: CheckoutValues) => {
+  const handleConfirm = async (e: FormEvent) => {
+    e.preventDefault();
     setSending(true);
     setSendError("");
     try {
@@ -248,8 +214,6 @@ export function CheckoutView() {
         shippingCost,
         total,
         customer: {
-          address: values.address,
-          notes: values.notes || undefined,
           shipping: "estandar",
         },
         status: respuesta.status,
@@ -258,7 +222,6 @@ export function CheckoutView() {
 
       const mensaje = buildWhatsAppMessage(
         respuesta.reference,
-        values,
         lines,
         subtotal,
         adminUrl
@@ -287,184 +250,125 @@ export function CheckoutView() {
     }
   };
 
-  const fieldError = (msg?: string) =>
-    msg ? <p className="mt-1.5 text-xs text-destructive">{msg}</p> : null;
-
   return (
-    <div className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6">
-      <header className="mb-7">
+    <div className="mx-auto max-w-2xl px-4 pb-16 pt-6 sm:px-6 sm:pt-8">
+      <header className="mb-6 sm:mb-7">
         <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-camel-deep">
           ÚLTIMO PASO
         </p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
           Formulario de pedido
         </h1>
-        <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
-          Indica tu dirección de entrega: registramos tu pedido y continuamos
-          por WhatsApp para confirmar el pago y la entrega.
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          Revisa tu selección y confirma para registrar el pedido y continuar
+          por WhatsApp.
         </p>
       </header>
 
-      <form onSubmit={handleSubmit(onSubmit)} noValidate>
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-8">
-          {/* ── Columna izquierda: datos ── */}
-          <div className="min-w-0 space-y-5 sm:space-y-6">
-            {/* Datos de entrega */}
-            <section className="rounded-[1.5rem] bg-card p-4 shadow-card sm:p-6">
-              <h2 className="flex items-center gap-2 text-base font-semibold">
-                <BadgeCheck className="h-4.5 w-4.5 shrink-0 text-camel-deep" />
-                Datos de entrega
-              </h2>
-              <div className="mt-4 flex min-w-0 flex-col gap-4 sm:mt-5">
-                <div className="min-w-0">
-                  <Label htmlFor="address">Dirección de entrega *</Label>
-                  <Input
-                    id="address"
-                    placeholder="Calle Principal 123, Apto 4B"
-                    className="mt-1.5 h-11 rounded-2xl border-input bg-background"
-                    {...register("address")}
-                  />
-                  {fieldError(errors.address?.message)}
-                </div>
-                <div className="min-w-0">
-                  <Label htmlFor="notes">Notas para el repartidor (opcional)</Label>
-                  <Textarea
-                    id="notes"
-                    placeholder="Detalles de entrega, horario preferido o indicaciones de llegada…"
-                    className="mt-1.5 min-h-20 rounded-2xl border-input bg-background"
-                    {...register("notes")}
-                  />
-                  {fieldError(errors.notes?.message)}
-                </div>
-              </div>
-            </section>
-
-            {/* Envío */}
-            <section className="rounded-[1.5rem] bg-card p-4 shadow-card sm:p-6">
-              <h2 className="flex items-center gap-2 text-base font-semibold">
-                <Truck className="h-4.5 w-4.5 shrink-0 text-camel-deep" />
-                Método de envío
-              </h2>
-              <div className="mt-4">
-                <div className="flex items-start gap-3 rounded-2xl border border-camel bg-secondary/60 p-3.5 sm:items-center sm:p-4">
-                  <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 border-camel sm:mt-0">
-                    <span className="h-2 w-2 rounded-full bg-camel" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <span className="text-sm font-semibold">
-                        {SHIPPING_OPTIONS[0]?.label ?? "Envío estándar"}
-                      </span>
-                      <span className="text-xs font-semibold text-camel-deep">
-                        Por confirmar
-                      </span>
-                    </div>
-                    <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
-                      Para hoy mismo se le enviará una confirmación por WhatsApp con el precio del envío
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* Pago */}
-            <section className="rounded-[1.5rem] border border-dashed border-camel bg-card p-4 shadow-card sm:p-6">
-              <h2 className="flex items-center gap-2 text-base font-semibold">
-                <BadgeCheck className="h-4.5 w-4.5 shrink-0 text-camel-deep" />
-                Pago por WhatsApp
-              </h2>
-              <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
-                Coordinamos el pago directamente en la conversación (transferencia, efectivo
-                contra entrega o el medio que acordemos).
-              </p>
-            </section>
+      <form onSubmit={handleConfirm} noValidate>
+        <section className="rounded-[1.5rem] bg-card p-4 shadow-card sm:p-6">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="text-base font-semibold">Tu pedido</h2>
+            <span className="text-xs text-muted-foreground">
+              {lines.reduce((a, l) => a + l.qty, 0)}{" "}
+              {lines.reduce((a, l) => a + l.qty, 0) === 1
+                ? "artículo"
+                : "artículos"}
+            </span>
           </div>
 
-          {/* ── Columna derecha: resumen ── */}
-          <aside className="min-w-0">
-            <div className="rounded-[1.5rem] bg-card p-4 shadow-card sm:p-6 lg:sticky lg:top-28">
-              <h2 className="text-base font-semibold">Tu pedido</h2>
-              <ul className="nice-scroll mt-4 max-h-64 space-y-3 overflow-y-auto pr-1">
-                {lines.map((l) => (
-                  <li key={`${l.productId}`} className="flex min-w-0 items-center gap-3">
-                    <span className="relative shrink-0">
-                      <LazyImage
-                        src={l.product.images[0]}
-                        alt={l.product.name}
-                        fallbackIconSize="sm"
-                        wrapperClassName="h-14 w-12 rounded-xl"
-                      />
-                      <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-foreground px-1 text-[10px] font-semibold text-background">
-                        {l.qty}
-                      </span>
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="line-clamp-2 break-words text-[13px] font-medium leading-snug">
-                        {l.product.name}
-                      </span>
-                      <span className="block truncate text-[11px] text-muted-foreground">
-                        {l.product.categoryName}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-right text-[13px] font-semibold">
-                      {formatPriceLabel(l.lineTotal)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-
-              <Separator className="my-4 bg-border" />
-
-              <div className="space-y-2.5 text-sm">
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="shrink-0 text-muted-foreground">Subtotal</span>
-                  <span className="text-right font-medium">{formatPrice(subtotal)}</span>
-                </div>
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="shrink-0 text-muted-foreground">Envío</span>
-                  <span className="text-right text-xs font-medium text-camel-deep">
-                    Por confirmar por WhatsApp
+          <ul className="nice-scroll mt-4 max-h-[26rem] space-y-3 overflow-y-auto pt-1.5 pr-1">
+            {lines.map((l) => (
+              <li
+                key={`${l.productId}`}
+                className="flex min-w-0 items-center gap-3"
+              >
+                <span className="relative shrink-0">
+                  <ZoomableThumb
+                    src={l.product.images[0]}
+                    alt={l.product.name}
+                    onPreview={setPreviewImage}
+                    priority
+                    className="h-16 w-14 rounded-xl"
+                  />
+                  <span className="pointer-events-none absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-foreground px-1 text-[10px] font-semibold text-background shadow-card">
+                    {l.qty}
                   </span>
-                </div>
-                <Separator className="bg-border" />
-                <div className="flex items-baseline justify-between gap-3 text-base">
-                  <span className="shrink-0 font-semibold">Total productos</span>
-                  <span className="text-right font-bold">{formatPrice(subtotal)}</span>
-                </div>
-              </div>
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="line-clamp-2 break-words text-[13.5px] font-medium leading-snug sm:text-[14px]">
+                    {l.product.name}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                    {l.product.categoryName}
+                  </span>
+                </span>
+                <span className="shrink-0 text-right text-[13.5px] font-semibold sm:text-sm">
+                  {formatPriceLabel(l.lineTotal)}
+                </span>
+              </li>
+            ))}
+          </ul>
 
-              {sinPrecio && (
-                <p className="mt-3 rounded-2xl bg-secondary/70 p-3 text-[12px] leading-relaxed text-muted-foreground">
-                  Tu pedido incluye artículos sin precio publicado: los
-                  confirmamos contigo por WhatsApp.
-                </p>
-              )}
+          <Separator className="my-4 bg-border" />
 
-              {sendError && (
-                <p className="mt-3 rounded-2xl bg-destructive/10 p-3 text-[12px] leading-relaxed text-destructive">
-                  {sendError}
-                </p>
-              )}
-
-              <Button
-                type="submit"
-                disabled={sending}
-                className="mt-6 h-12 w-full rounded-full text-sm font-semibold"
-              >
-                {sending ? "Registrando pedido…" : "Confirmar y abrir WhatsApp"}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => navigate("/carrito")}
-                className="mt-2 h-10 w-full rounded-full text-[13px]"
-              >
-                Volver al carrito
-              </Button>
+          <div className="space-y-2.5 text-sm">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="shrink-0 text-muted-foreground">Subtotal</span>
+              <span className="text-right font-medium">
+                {formatPrice(subtotal)}
+              </span>
             </div>
-          </aside>
-        </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="shrink-0 text-muted-foreground">Envío</span>
+              <span className="text-right text-xs font-medium text-camel-deep">
+                Por confirmar por WhatsApp
+              </span>
+            </div>
+            <Separator className="bg-border" />
+            <div className="flex items-baseline justify-between gap-3 text-base">
+              <span className="shrink-0 font-semibold">Total productos</span>
+              <span className="text-right font-bold">
+                {formatPrice(subtotal)}
+              </span>
+            </div>
+          </div>
+
+          {sinPrecio && (
+            <p className="mt-3 rounded-2xl bg-secondary/70 p-3 text-[12px] leading-relaxed text-muted-foreground">
+              Tu pedido incluye artículos sin precio publicado: los confirmamos
+              contigo por WhatsApp.
+            </p>
+          )}
+
+          {sendError && (
+            <p className="mt-3 rounded-2xl bg-destructive/10 p-3 text-[12px] leading-relaxed text-destructive">
+              {sendError}
+            </p>
+          )}
+
+          <Button
+            type="submit"
+            disabled={sending}
+            className="mt-6 h-12 w-full rounded-full text-sm font-semibold"
+          >
+            {sending ? "Registrando pedido…" : "Confirmar y abrir WhatsApp"}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => navigate("/carrito")}
+            className="mt-2 h-10 w-full rounded-full text-[13px]"
+          >
+            Volver al carrito
+          </Button>
+        </section>
       </form>
+
+      <ImagePreviewModal
+        image={previewImage}
+        onClose={() => setPreviewImage(null)}
+      />
     </div>
   );
 }
