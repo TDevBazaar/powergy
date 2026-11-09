@@ -94,27 +94,29 @@ export function ImagePreviewModal({ image, onClose }: ImagePreviewModalProps) {
         if (!open) onClose();
       }}
     >
-      <DialogContent className="max-w-[calc(100%-1.5rem)] rounded-[1.6rem] bg-card p-4 sm:max-w-2xl sm:p-6">
+      <DialogContent className="rounded-[1.6rem] bg-card p-4 sm:max-w-2xl sm:p-6">
         <DialogHeader>
-          <DialogTitle className="truncate pr-8 text-left text-base sm:text-lg">
+          <DialogTitle className="line-clamp-2 text-base sm:text-lg">
             {image?.alt || "Imagen del producto"}
           </DialogTitle>
         </DialogHeader>
 
         {image && (
-          <div className="flex min-h-56 items-center justify-center overflow-hidden rounded-2xl bg-secondary/55 p-2 sm:min-h-72 sm:p-4">
+          <div className="flex min-h-48 w-full min-w-0 flex-col items-center justify-center overflow-hidden rounded-2xl bg-secondary/55 p-2 sm:min-h-72 sm:p-4">
             {broken ? (
               <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground">
                 <ImageOff className="h-8 w-8 opacity-45" />
                 <span>No se pudo cargar la imagen.</span>
               </div>
             ) : (
-              <img
-                src={image.src}
-                alt={image.alt}
-                onError={() => setFailedSrc(image.src)}
-                className="max-h-[70vh] w-auto max-w-full rounded-xl object-contain"
-              />
+              <div className="w-full min-w-0">
+                <img
+                  src={image.src}
+                  alt={image.alt}
+                  onError={() => setFailedSrc(image.src)}
+                  className="mx-auto block h-auto max-h-[58dvh] w-auto max-w-full rounded-xl object-contain sm:max-h-[68dvh]"
+                />
+              </div>
             )}
           </div>
         )}
@@ -133,3 +135,4 @@ export function ImagePreviewModal({ image, onClose }: ImagePreviewModalProps) {
     </Dialog>
   );
 }
+

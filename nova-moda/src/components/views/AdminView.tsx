@@ -1995,14 +1995,14 @@ export function AdminView() {
 
       {/* ── Diálogo de producto ── */}
       <Dialog open={modalProducto} onOpenChange={setModalProducto}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto rounded-[1.6rem] bg-card p-4 sm:max-w-lg sm:p-6">
+        <DialogContent className="rounded-[1.6rem] bg-card p-4 sm:max-w-lg sm:p-6">
           <DialogHeader>
             <DialogTitle>
               {formProducto.id ? "Editar producto" : "Nuevo producto"}
             </DialogTitle>
           </DialogHeader>
-          <div className="grid gap-3.5 sm:gap-4">
-            <div>
+          <div className="flex min-w-0 flex-col gap-3.5 sm:gap-4">
+            <div className="min-w-0">
               <Label htmlFor="p-name">Nombre *</Label>
               <Input
                 id="p-name"
@@ -2014,8 +2014,8 @@ export function AdminView() {
                 className="mt-1.5 h-11 rounded-2xl border-input bg-background"
               />
             </div>
-            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 sm:gap-4">
-              <div>
+            <div className="grid min-w-0 grid-cols-1 gap-3.5 sm:grid-cols-2 sm:gap-4">
+              <div className="min-w-0">
                 <Label>Categoría *</Label>
                 <Select
                   value={formProducto.categoryId}
@@ -2023,7 +2023,7 @@ export function AdminView() {
                     setFormProducto({ ...formProducto, categoryId: v })
                   }
                 >
-                  <SelectTrigger className="mt-1.5 h-11 rounded-2xl border-input bg-background">
+                  <SelectTrigger className="mt-1.5 h-11 w-full min-w-0 rounded-2xl border-input bg-background">
                     <SelectValue placeholder="Elige una" />
                   </SelectTrigger>
                   <SelectContent>
@@ -2035,7 +2035,7 @@ export function AdminView() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
+              <div className="min-w-0">
                 <Label htmlFor="p-price">Precio (USD)</Label>
                 <Input
                   id="p-price"
@@ -2049,8 +2049,8 @@ export function AdminView() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 sm:gap-4">
-              <div>
+            <div className="grid min-w-0 grid-cols-1 gap-3.5 sm:grid-cols-2 sm:gap-4">
+              <div className="min-w-0">
                 <Label htmlFor="p-brand">Marca</Label>
                 <Input
                   id="p-brand"
@@ -2062,7 +2062,7 @@ export function AdminView() {
                   className="mt-1.5 h-11 rounded-2xl border-input bg-background"
                 />
               </div>
-              <div>
+              <div className="min-w-0">
                 <Label htmlFor="p-model">Modelo</Label>
                 <Input
                   id="p-model"
@@ -2075,8 +2075,8 @@ export function AdminView() {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 sm:gap-4">
-              <div>
+            <div className="grid min-w-0 grid-cols-1 gap-3.5 sm:grid-cols-2 sm:gap-4">
+              <div className="min-w-0">
                 <Label htmlFor="p-subcategory">Subcategoría</Label>
                 <Input
                   id="p-subcategory"
@@ -2091,7 +2091,7 @@ export function AdminView() {
                   className="mt-1.5 h-11 rounded-2xl border-input bg-background"
                 />
               </div>
-              <div>
+              <div className="min-w-0">
                 <Label htmlFor="p-slug">Enlace (slug)</Label>
                 <Input
                   id="p-slug"
@@ -2102,7 +2102,7 @@ export function AdminView() {
                 />
               </div>
             </div>
-            <div>
+            <div className="min-w-0">
               <Label htmlFor="p-desc">Descripción</Label>
               <Textarea
                 id="p-desc"
@@ -2117,9 +2117,9 @@ export function AdminView() {
                 className="mt-1.5 min-h-20 rounded-2xl border-input bg-background"
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <Label htmlFor="p-image">Imagen *</Label>
-              <div className="mt-1.5 flex items-center gap-3">
+              <div className="mt-1.5 flex min-w-0 items-center gap-3">
                 <ZoomableThumb
                   src={formProducto.image}
                   alt={formProducto.name || "Imagen del producto"}
@@ -2154,8 +2154,8 @@ export function AdminView() {
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-2 rounded-2xl bg-secondary/60 p-3.5 sm:gap-3 sm:p-4">
-              <label className="flex items-center gap-2 text-[12.5px] font-medium sm:text-[13px]">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-2xl bg-secondary/60 p-3.5 sm:grid sm:grid-cols-3 sm:gap-3 sm:p-4">
+              <label className="flex shrink-0 items-center gap-2 text-[12.5px] font-medium sm:text-[13px]">
                 <Switch
                   checked={formProducto.onSale}
                   onCheckedChange={(v) =>
@@ -2164,7 +2164,7 @@ export function AdminView() {
                 />
                 Oferta
               </label>
-              <label className="flex items-center gap-2 text-[12.5px] font-medium sm:text-[13px]">
+              <label className="flex shrink-0 items-center gap-2 text-[12.5px] font-medium sm:text-[13px]">
                 <Switch
                   checked={formProducto.topVentas}
                   onCheckedChange={(v) =>
@@ -2173,7 +2173,7 @@ export function AdminView() {
                 />
                 Populares
               </label>
-              <label className="flex items-center gap-2 text-[12.5px] font-medium sm:text-[13px]">
+              <label className="flex shrink-0 items-center gap-2 text-[12.5px] font-medium sm:text-[13px]">
                 <Switch
                   checked={formProducto.active}
                   onCheckedChange={(v) =>
@@ -2215,8 +2215,8 @@ export function AdminView() {
               {formCategoria.id ? "Editar categoría" : "Nueva categoría"}
             </DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4">
-            <div>
+          <div className="flex min-w-0 flex-col gap-4">
+            <div className="min-w-0">
               <Label htmlFor="c-name">Nombre *</Label>
               <Input
                 id="c-name"
@@ -2228,7 +2228,7 @@ export function AdminView() {
                 className="mt-1.5 h-11 rounded-2xl border-input bg-background"
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <Label htmlFor="c-order">Orden</Label>
               <Input
                 id="c-order"
@@ -2276,9 +2276,9 @@ export function AdminView() {
           }
         }}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto rounded-[1.6rem] bg-card p-4 sm:max-w-2xl sm:p-6">
+        <DialogContent className="rounded-[1.6rem] bg-card p-4 sm:max-w-2xl sm:p-6">
           <DialogHeader>
-            <DialogTitle className="flex flex-wrap items-center gap-2.5 pr-6">
+            <DialogTitle className="flex flex-wrap items-center gap-2.5">
               <span className="font-mono text-base">{solicitud?.reference}</span>
               {solicitud && (
                 <span
@@ -2301,19 +2301,19 @@ export function AdminView() {
           )}
 
           {detalle && (
-            <div className="grid gap-5">
-              <div className="grid grid-cols-2 gap-3 rounded-2xl bg-secondary/60 p-3.5 text-[13px] sm:grid-cols-3 sm:p-4">
-                <div>
+            <div className="flex min-w-0 flex-col gap-4 sm:gap-5">
+              <div className="grid min-w-0 grid-cols-2 gap-3 rounded-2xl bg-secondary/60 p-3.5 text-[13px] sm:grid-cols-3 sm:p-4">
+                <div className="min-w-0">
                   <p className="text-[11px] text-muted-foreground">Fecha</p>
-                  <p className="font-medium">{formatDate(detalle.createdAt)}</p>
+                  <p className="font-medium break-words">{formatDate(detalle.createdAt)}</p>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-[11px] text-muted-foreground">Productos</p>
                   <p className="font-medium">
                     {detalle.items.reduce((a, i) => a + i.quantity, 0)} uds.
                   </p>
                 </div>
-                <div className="col-span-2 sm:col-span-1">
+                <div className="col-span-2 min-w-0 sm:col-span-1">
                   <p className="text-[11px] text-muted-foreground">
                     Total estimado
                   </p>
@@ -2324,8 +2324,8 @@ export function AdminView() {
               </div>
 
               {/* Líneas */}
-              <div>
-                <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                     Productos solicitados
                   </p>
@@ -2351,7 +2351,7 @@ export function AdminView() {
                       <li
                         key={linea.productId}
                         className={cn(
-                          "flex flex-col gap-3 rounded-2xl border border-input bg-background p-3 sm:flex-row sm:items-center",
+                          "flex min-w-0 flex-col gap-3 rounded-2xl border border-input bg-background p-3 sm:flex-row sm:items-center",
                           linea.quitar && "opacity-50"
                         )}
                       >
@@ -2374,7 +2374,7 @@ export function AdminView() {
                         </div>
 
                         {esAbierta ? (
-                          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-2.5 sm:shrink-0 sm:justify-end sm:border-t-0 sm:pt-0">
+                          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-2.5 sm:shrink-0 sm:justify-end sm:border-t-0 sm:pt-0">
                             <QuantityStepper
                               size="sm"
                               value={linea.quantity}
@@ -2405,7 +2405,7 @@ export function AdminView() {
                                 }
                                 placeholder="0.00"
                                 inputMode="decimal"
-                                className="h-9 w-22 rounded-xl border-input bg-card sm:w-24"
+                                className="h-9 w-20 rounded-xl border-input bg-card sm:w-24"
                               />
                             </span>
                             <Button
@@ -2420,7 +2420,7 @@ export function AdminView() {
                                   )
                                 )
                               }
-                              className="h-9 rounded-full border-input bg-card px-3 text-[12px]"
+                              className="ml-auto h-9 rounded-full border-input bg-card px-3 text-[12px] sm:ml-0"
                             >
                               {linea.quitar ? "Reponer" : "Quitar"}
                             </Button>
@@ -2449,7 +2449,7 @@ export function AdminView() {
                       {detalle.removedItems.map((l) => (
                         <li
                           key={`${l.productId}-${l.removedAt ?? "removed"}`}
-                          className="flex items-center gap-2.5 text-xs text-muted-foreground"
+                          className="flex min-w-0 items-center gap-2.5 text-xs text-muted-foreground"
                         >
                           <ZoomableThumb
                             src={productImages[l.productId]}
@@ -2473,20 +2473,20 @@ export function AdminView() {
 
               {/* Resultado */}
               {detalle.status === "requested" ? (
-                <div className="grid gap-4">
-                  <div className="grid gap-3 sm:grid-cols-2">
+                <div className="flex min-w-0 flex-col gap-4">
+                  <div className="grid min-w-0 gap-3 sm:grid-cols-2">
                     <button
                       type="button"
                       onClick={() => setResultado("closed")}
                       className={cn(
-                        "flex items-center gap-3 rounded-2xl border p-4 text-left transition",
+                        "flex min-w-0 items-center gap-3 rounded-2xl border p-3.5 text-left transition sm:p-4",
                         resultado === "closed"
                           ? "border-[#4E5B48] bg-[#4E5B48]/10"
                           : "border-input bg-background hover:border-[#4E5B48]/50"
                       )}
                     >
                       <CheckCircle2 className="h-5 w-5 shrink-0 text-[#4E5B48]" />
-                      <span>
+                      <span className="min-w-0">
                         <span className="block text-sm font-semibold">
                           Vendida
                         </span>
@@ -2499,14 +2499,14 @@ export function AdminView() {
                       type="button"
                       onClick={() => setResultado("cancelled")}
                       className={cn(
-                        "flex items-center gap-3 rounded-2xl border p-4 text-left transition",
+                        "flex min-w-0 items-center gap-3 rounded-2xl border p-3.5 text-left transition sm:p-4",
                         resultado === "cancelled"
                           ? "border-[#B3402E] bg-[#B3402E]/10"
                           : "border-input bg-background hover:border-[#B3402E]/50"
                       )}
                     >
                       <XCircle className="h-5 w-5 shrink-0 text-[#B3402E]" />
-                      <span>
+                      <span className="min-w-0">
                         <span className="block text-sm font-semibold">
                           Cancelada
                         </span>
@@ -2518,11 +2518,11 @@ export function AdminView() {
                   </div>
 
                   {resultado === "cancelled" && (
-                    <div className="grid gap-4 rounded-2xl bg-secondary/60 p-4">
-                      <div>
+                    <div className="flex min-w-0 flex-col gap-4 rounded-2xl bg-secondary/60 p-3.5 sm:p-4">
+                      <div className="min-w-0">
                         <Label>Motivo *</Label>
                         <Select value={motivo} onValueChange={setMotivo}>
-                          <SelectTrigger className="mt-1.5 h-11 rounded-2xl border-input bg-background">
+                          <SelectTrigger className="mt-1.5 h-11 w-full min-w-0 rounded-2xl border-input bg-background">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -2534,7 +2534,7 @@ export function AdminView() {
                           </SelectContent>
                         </Select>
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <Label htmlFor="cancel-note">Nota (opcional)</Label>
                         <Textarea
                           id="cancel-note"
@@ -2548,7 +2548,7 @@ export function AdminView() {
                   )}
 
                   {resultado === "closed" && haySinPrecio && (
-                    <div className="rounded-2xl bg-camel/15 p-4">
+                    <div className="rounded-2xl bg-camel/15 p-3.5 sm:p-4">
                       <p className="flex items-start gap-2 text-[12.5px] leading-relaxed text-camel-deep">
                         <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
                         Hay productos sin precio: se guardarán como «consultar» y
@@ -2569,7 +2569,7 @@ export function AdminView() {
                   )}
                 </div>
               ) : (
-                <div className="rounded-2xl bg-secondary/60 p-4 text-[13px]">
+                <div className="rounded-2xl bg-secondary/60 p-3.5 text-[13px] sm:p-4">
                   <p className="font-semibold">
                     {detalle.status === "closed"
                       ? "Solicitud vendida"
@@ -2577,7 +2577,7 @@ export function AdminView() {
                     {detalle.closedAt ? ` · ${formatDate(detalle.closedAt)}` : ""}
                   </p>
                   {detalle.cancellationReason && (
-                    <p className="mt-1 text-muted-foreground">
+                    <p className="mt-1 break-words text-muted-foreground">
                       Motivo:{" "}
                       {CANCELLATION_REASONS.find(
                         (r) => r.id === detalle.cancellationReason

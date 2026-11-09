@@ -198,18 +198,19 @@ export function SearchView({
               )}
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="w-[85%] max-w-sm overflow-y-auto">
-            <SheetHeader className="p-0">
-              <SheetTitle className="sr-only">Filtros</SheetTitle>
+          <SheetContent
+            side="left"
+            className="w-[88%] max-w-sm overflow-y-auto px-5 pt-12 pb-8"
+          >
+            <SheetHeader className="sr-only">
+              <SheetTitle>Filtros</SheetTitle>
             </SheetHeader>
-            <div className="px-1 pb-6">
-              <FilterControls
-                maxPriceCeiling={maxPriceCeiling}
-                filters={filters}
-                onChange={patch}
-                onReset={handleReset}
-              />
-            </div>
+            <FilterControls
+              maxPriceCeiling={maxPriceCeiling}
+              filters={filters}
+              onChange={patch}
+              onReset={handleReset}
+            />
           </SheetContent>
         </Sheet>
       </div>
