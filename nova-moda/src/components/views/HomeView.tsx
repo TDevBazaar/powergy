@@ -124,9 +124,14 @@ export function HomeView() {
         <SectionTitle title="The most popular clothes today" />
         <button
           type="button"
-          onClick={() => navigate("/buscar")}
+          onClick={() => {
+            navigate("/catalogo");
+            window.setTimeout(() => {
+              document.getElementById("catalog-search")?.focus();
+            }, 60);
+          }}
           className="mb-7 flex h-12 w-full items-center gap-3 rounded-full border border-input bg-card px-5 text-left text-sm text-muted-foreground shadow-card transition hover:border-camel"
-          aria-label="Ir a la búsqueda de productos"
+          aria-label="Ir al catálogo y buscar productos"
         >
           <Search className="h-4 w-4" />
           Buscar sudadera, gabardina, bolso…

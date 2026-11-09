@@ -5,7 +5,6 @@ import { Header } from "@/components/layout/Header";
 import { MobileMenu } from "@/components/layout/MobileMenu";
 import { Footer } from "@/components/layout/Footer";
 import { HomeView } from "@/components/views/HomeView";
-import { CatalogView } from "@/components/views/CatalogView";
 import { CategoryView } from "@/components/views/CategoryView";
 import { ProductDetailView } from "@/components/views/ProductDetailView";
 import { SearchView } from "@/components/views/SearchView";
@@ -40,9 +39,13 @@ function CurrentView() {
     case undefined:
       return <HomeView />;
     case "catalogo":
-      return <CatalogView initialCat={route.query.get("cat")} />;
     case "buscar":
-      return <SearchView initialQuery={route.query.get("q") ?? ""} />;
+      return (
+        <SearchView
+          initialQuery={route.query.get("q") ?? ""}
+          initialCat={route.query.get("cat")}
+        />
+      );
     case "categoria": {
       const id = second;
       return id ? <CategoryView categoryId={id} /> : <NotFoundView />;

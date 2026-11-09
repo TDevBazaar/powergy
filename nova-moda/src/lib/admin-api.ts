@@ -122,14 +122,47 @@ export interface CloseOrderPayload {
 
 /* ── Llamadas ─────────────────────────────────────────────────── */
 
+export interface AdminProductsQuery {
+  term?: string;
+  page?: number;
+  pageSize?: number;
+  signal?: AbortSignal;
+}
+
+export interface AdminOrdersQuery {
+  status?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+  signal?: AbortSignal;
+}
+
+export interface OrderMetricsQuery {
+  from?: string;
+  to?: string;
+  signal?: AbortSignal;
+}
+
 export function fetchAdminProducts(
   token: string,
-  term = ""
+  options: string | AdminProductsQuery = {}
 ): Promise<ApiPage<ApiProduct>> {
-  const q = term.trim() ? `&q=${encodeURIComponent(term.trim())}` : "";
+  const query = typeof options === "string" ? { term: options } : options;
+  const params = new URLSearchParams({
+    store: NOVA_STORE,
+    includeInactive: "true",
+    page: String(query.page ?? 1),
+    pageSize: String(query.pageSize ?? 20),
+  });
+  const cleanTerm = query.term?.trim();
+  if (cleanTerm) {
+    params.set("q", cleanTerm);
+  }
   return apiGet<ApiPage<ApiProduct>>(
-    `products/admin?${STORE_QUERY}&includeInactive=true&page=1&pageSize=100${q}`,
-    token
+    `products/admin?${params.toString()}`,
+    token,
+    query.signal
   );
 }
 
@@ -137,21 +170,41 @@ export function fetchAdminCategories(token: string): Promise<ApiCategory[]> {
   return apiGet<ApiCategory[]>(`categories/admin?${STORE_QUERY}`, token);
 }
 
-export function fetchAdminOrders(token: string): Promise<
-  ApiPage<AdminOrderListItem>
-> {
+export function fetchAdminOrders(
+  token: string,
+  options: AdminOrdersQuery = {}
+): Promise<ApiPage<AdminOrderListItem>> {
+  const params = new URLSearchParams({
+    store: NOVA_STORE,
+    page: String(options.page ?? 1),
+    pageSize: String(options.pageSize ?? 20),
+  });
+  if (options.status?.trim()) params.set("status", options.status.trim());
+  if (options.from?.trim()) params.set("from", options.from.trim());
+  if (options.to?.trim()) params.set("to", options.to.trim());
   return apiGet<ApiPage<AdminOrderListItem>>(
-    `admin/orders?${STORE_QUERY}&page=1&pageSize=100`,
-    token
+    `admin/orders?${params.toString()}`,
+    token,
+    options.signal
   );
 }
 
-export function fetchOrderMetrics(token: string): Promise<OrderMetrics> {
-  return apiGet<OrderMetrics>(`admin/orders/metrics?${STORE_QUERY}`, token);
+export function fetchOrderMetrics(
+  token: string,
+  options: OrderMetricsQuery = {}
+): Promise<OrderMetrics> {
+  const params = new URLSearchParams({ store: NOVA_STORE });
+  if (options.from?.trim()) params.set("from", options.from.trim());
+  if (options.to?.trim()) params.set("to", options.to.trim());
+  return apiGet<OrderMetrics>(
+    `admin/orders/metrics?${params.toString()}`,
+    token,
+    options.signal
+  );
 }
 
 export function fetchOrder(token: string, id: string): Promise<AdminOrder> {
-  return apiGet<AdminOrder>(`admin/orders/${id}?${STORE_QUERY}`, token);
+  return apiGet<AdminOrder>(`admin/orders/${encodeURIComponent(id)}?${STORE_QUERY}`, token);
 }
 
 export function createProduct(

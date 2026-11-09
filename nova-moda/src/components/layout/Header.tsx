@@ -37,7 +37,11 @@ export function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
   );
 
   const isActive = (to: string) =>
-    to === "/" ? route.path === "/" : route.path.startsWith(to);
+    to === "/"
+      ? route.path === "/"
+      : to === "/catalogo"
+        ? route.path.startsWith("/catalogo") || route.path.startsWith("/buscar")
+        : route.path.startsWith(to);
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/85 backdrop-blur-md">
@@ -98,7 +102,12 @@ export function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
           <button
             type="button"
             aria-label="Buscar productos"
-            onClick={() => navigate("/buscar")}
+            onClick={() => {
+              navigate("/catalogo");
+              window.setTimeout(() => {
+                document.getElementById("catalog-search")?.focus();
+              }, 60);
+            }}
             className="flex h-10 w-10 items-center justify-center rounded-full transition hover:bg-secondary"
           >
             <Search className="h-[18px] w-[18px]" />

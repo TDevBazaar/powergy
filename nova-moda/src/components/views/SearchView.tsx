@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { PackageSearch, Search, SlidersHorizontal } from "lucide-react";
 import {
   Sheet,
@@ -21,19 +21,51 @@ import {
   priceCeilingFromMax,
   useCatalogMeta,
   useCategories,
+  useCategoriesStatus,
 } from "@/lib/catalog";
 import { useCatalogFeed } from "@/lib/useCatalogFeed";
 import { navigate } from "@/lib/router";
+import type { CategoryId } from "@/lib/types";
 
-export function SearchView({ initialQuery }: { initialQuery: string }) {
+interface SearchViewProps {
+  initialQuery?: string;
+  initialCat?: string | null;
+}
+
+export function SearchView({
+  initialQuery = "",
+  initialCat,
+}: SearchViewProps) {
   const categories = useCategories();
+  const categoriesStatus = useCategoriesStatus();
   const meta = useCatalogMeta();
-  const { filters, patch, reset } = useFilterState({ q: initialQuery });
-  const inputRef = useRef<HTMLInputElement>(null);
+
+  const validCat = useMemo(
+    () =>
+      initialCat && categories.some((c) => c.slug === initialCat)
+        ? (initialCat as CategoryId)
+        : undefined,
+    [categories, initialCat]
+  );
+
+  const { filters, patch, reset } = useFilterState({
+    q: initialQuery,
+    ...(initialCat ? { cats: [initialCat as CategoryId] } : {}),
+  });
 
   useEffect(() => {
     patch({ q: initialQuery });
   }, [initialQuery, patch]);
+
+  // Si llega ?cat= desde algún enlace, sincroniza y valida al cargar categorías
+  useEffect(() => {
+    if (!initialCat) return;
+    if (categoriesStatus === "ready") {
+      patch({ cats: validCat ? [validCat] : [] });
+    } else if (categoriesStatus !== "error") {
+      patch({ cats: [initialCat as CategoryId] });
+    }
+  }, [initialCat, categoriesStatus, validCat, patch]);
 
   const feed = useCatalogFeed({
     filters,
@@ -48,6 +80,13 @@ export function SearchView({ initialQuery }: { initialQuery: string }) {
     },
     [feed]
   );
+
+  const handleReset = useCallback(() => {
+    reset();
+    if (initialQuery || initialCat) {
+      navigate("/catalogo", { replace: true, keepScroll: true });
+    }
+  }, [reset, initialQuery, initialCat]);
 
   /* Sugerencias reales de la tienda: categorías y etiquetas visibles */
   const populares = useMemo(() => {
@@ -76,9 +115,10 @@ export function SearchView({ initialQuery }: { initialQuery: string }) {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const q = inputRef.current?.value.trim() ?? "";
-    navigate(`/buscar${q ? `?q=${encodeURIComponent(q)}` : ""}`, {
+    const q = filters.q.trim();
+    navigate(`/catalogo${q ? `?q=${encodeURIComponent(q)}` : ""}`, {
       replace: true,
+      keepScroll: true,
     });
   };
 
@@ -86,25 +126,25 @@ export function SearchView({ initialQuery }: { initialQuery: string }) {
     <div className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6">
       <header className="mb-7 text-center">
         <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-camel-deep">
-          BÚSQUEDA Y FILTROS
+          NOVA MODA
         </p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
-          Encuentra tu estilo
+          Catálogo
         </h1>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
-          Busca por nombre, descripción o marca y combina el resultado con
-          los filtros disponibles.
+        <p className="mx-auto mt-2 max-w-lg text-sm leading-relaxed text-muted-foreground">
+          Explora todas las prendas y accesorios. Busca por nombre o marca y
+          combina el resultado con los filtros de categoría y precio.
         </p>
       </header>
 
-      {/* Buscador grande */}
+      {/* Buscador principal */}
       <form onSubmit={submit} role="search" className="relative mx-auto max-w-2xl">
         <Search className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
         <input
-          ref={inputRef}
-          key={initialQuery}
+          id="catalog-search"
           type="search"
-          defaultValue={initialQuery}
+          value={filters.q}
+          onChange={(e) => patch({ q: e.target.value })}
           placeholder="Busca por nombre, marca o categoría…"
           aria-label="Buscar productos"
           className="h-14 w-full rounded-full border border-input bg-card pl-13 pr-28 text-sm shadow-card placeholder:text-muted-foreground/70 focus:border-camel focus:outline-none focus:ring-2 focus:ring-camel/40"
@@ -118,29 +158,33 @@ export function SearchView({ initialQuery }: { initialQuery: string }) {
       </form>
 
       {/* Términos populares */}
-      <div className="mx-auto mt-4 flex max-w-2xl flex-wrap items-center justify-center gap-2">
-        {populares.map((term) => (
-          <button
-            key={term}
-            type="button"
-            onClick={() =>
-              navigate(`/buscar?q=${encodeURIComponent(term)}`, {
-                replace: true,
-              })
-            }
-            className="rounded-full bg-secondary px-3.5 py-1.5 text-xs font-medium text-secondary-foreground transition hover:bg-accent"
-          >
-            {term}
-          </button>
-        ))}
-      </div>
+      {populares.length > 0 && (
+        <div className="mx-auto mt-4 flex max-w-2xl flex-wrap items-center justify-center gap-2">
+          {populares.map((term) => (
+            <button
+              key={term}
+              type="button"
+              onClick={() => {
+                patch({ q: term });
+                navigate(`/catalogo?q=${encodeURIComponent(term)}`, {
+                  replace: true,
+                  keepScroll: true,
+                });
+              }}
+              className="rounded-full bg-secondary px-3.5 py-1.5 text-xs font-medium text-secondary-foreground transition hover:bg-accent"
+            >
+              {term}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Móvil: filtros */}
       <div className="mb-6 mt-8 flex items-center justify-between gap-3 lg:hidden">
         <p className="text-sm text-muted-foreground">
           {feed.loadingInitial
-            ? "Buscando productos…"
-            : `${totalDisplay} ${totalDisplay === 1 ? "resultado" : "resultados"}`}
+            ? "Cargando productos…"
+            : `${totalDisplay} ${totalDisplay === 1 ? "producto" : "productos"}`}
         </p>
         <Sheet>
           <SheetTrigger asChild>
@@ -163,7 +207,7 @@ export function SearchView({ initialQuery }: { initialQuery: string }) {
                 maxPriceCeiling={maxPriceCeiling}
                 filters={filters}
                 onChange={patch}
-                onReset={reset}
+                onReset={handleReset}
               />
             </div>
           </SheetContent>
@@ -177,7 +221,7 @@ export function SearchView({ initialQuery }: { initialQuery: string }) {
               maxPriceCeiling={maxPriceCeiling}
               filters={filters}
               onChange={patch}
-              onReset={reset}
+              onReset={handleReset}
             />
           </div>
         </aside>
@@ -185,7 +229,7 @@ export function SearchView({ initialQuery }: { initialQuery: string }) {
         <div>
           <p className="mb-5 hidden text-sm text-muted-foreground lg:block">
             {feed.loadingInitial ? (
-              "Buscando productos…"
+              "Cargando productos…"
             ) : hasQuery ? (
               <>
                 Resultados para{" "}
@@ -193,7 +237,15 @@ export function SearchView({ initialQuery }: { initialQuery: string }) {
                 — {totalDisplay}
               </>
             ) : (
-              <>{totalDisplay} productos · escribe arriba para filtrar por texto</>
+              <>
+                {totalDisplay} {totalDisplay === 1 ? "producto" : "productos"}
+                {filters.cats.length > 0 &&
+                  ` · ${filters.cats
+                    .map(
+                      (c) => categories.find((cat) => cat.slug === c)?.name ?? c
+                    )
+                    .join(", ")}`}
+              </>
             )}
           </p>
           {feed.loadingInitial ? (
@@ -204,7 +256,7 @@ export function SearchView({ initialQuery }: { initialQuery: string }) {
           ) : feed.error ? (
             <EmptyState
               icon={PackageSearch}
-              title="No se pudo completar la búsqueda"
+              title="No se pudo cargar el catálogo"
               description={feed.error}
               ctaLabel="Reintentar"
               onCta={feed.retry}
@@ -212,10 +264,10 @@ export function SearchView({ initialQuery }: { initialQuery: string }) {
           ) : feed.items.length === 0 ? (
             <EmptyState
               icon={PackageSearch}
-              title={hasQuery ? `Sin resultados para “${filters.q}”` : "Nada encontrado"}
-              description="Prueba con otro término o relaja los filtros de precio."
+              title={hasQuery ? `Sin resultados para “${filters.q}”` : "Sin resultados"}
+              description="Prueba con otro término o relaja los filtros elegidos."
               ctaLabel="Limpiar filtros"
-              onCta={reset}
+              onCta={handleReset}
             />
           ) : (
             <>

@@ -28,7 +28,6 @@ export function Footer() {
     () => [
       { label: "Catálogo completo", to: "/catalogo" },
       ...categories.map((c) => ({ label: c.name, to: `/categoria/${c.slug}` })),
-      { label: "Buscar productos", to: "/buscar" },
     ],
     [categories]
   );

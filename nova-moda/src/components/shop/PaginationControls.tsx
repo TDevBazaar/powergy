@@ -10,6 +10,8 @@ interface PaginationControlsProps {
   pageSize: number;
   onPageChange: (nextPage: number) => void;
   disabled?: boolean;
+  itemLabel?: string;
+  className?: string;
 }
 
 function buildPages(current: number, total: number): (number | "ellipsis")[] {
@@ -37,6 +39,8 @@ export function PaginationControls({
   pageSize,
   onPageChange,
   disabled = false,
+  itemLabel = "productos",
+  className,
 }: PaginationControlsProps) {
   if (totalPages <= 1) return null;
 
@@ -45,15 +49,23 @@ export function PaginationControls({
   const to = Math.min(page * pageSize, totalItems);
 
   return (
-    <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-border/70 pt-6 sm:flex-row">
-      <p className="text-xs text-muted-foreground">
+    <div
+      className={cn(
+        "mt-10 flex flex-col items-center justify-between gap-4 border-t border-border/70 pt-6 sm:flex-row",
+        className
+      )}
+    >
+      <p className="text-center text-xs text-muted-foreground sm:text-left">
         Mostrando <span className="font-semibold text-foreground">{from}</span>–
         <span className="font-semibold text-foreground">{to}</span> de{" "}
         <span className="font-semibold text-foreground">{totalItems}</span>{" "}
-        productos
+        {itemLabel}
       </p>
 
-      <nav aria-label="Paginación de productos" className="flex items-center gap-1.5">
+      <nav
+        aria-label={`Paginación de ${itemLabel}`}
+        className="flex flex-wrap items-center justify-center gap-1.5"
+      >
         <button
           type="button"
           disabled={disabled || page <= 1}
