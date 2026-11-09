@@ -32,14 +32,16 @@ import {
   apiSend,
   type ApiOrder,
 } from "@/lib/powergy-api";
+import { buildOrderPreviewPath } from "@/lib/order-preview";
 import { whatsappUrl } from "@/lib/whatsapp";
 import type { CartLine, Order } from "@/lib/types";
 
-/** Mensaje de WhatsApp con el detalle del pedido y enlace directo para el admin */
+/** Mensaje de WhatsApp con el detalle del pedido, vista previa visual y enlace directo para el admin */
 function buildWhatsAppMessage(
   reference: string,
   lines: CartLine[],
   subtotal: number,
+  previewUrl: string,
   adminUrl: string
 ): string {
   const detalle = lines
@@ -62,6 +64,9 @@ function buildWhatsAppMessage(
     `Subtotal: ${formatPrice(subtotal)}`,
     "Envío: Por confirmar vía WhatsApp",
     `Total productos: ${formatPrice(subtotal)}`,
+    "",
+    "🖼️ Vista previa con fotos:",
+    previewUrl,
     "",
     "🔗 Enlace directo al pedido (Admin):",
     adminUrl,
@@ -205,6 +210,18 @@ export function CheckoutView() {
       });
 
       const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const previewUrl = `${origin}${buildOrderPreviewPath(
+        respuesta.reference,
+        lines.map((l) => ({
+          productId: l.productId,
+          qty: l.qty,
+          name: l.product.name,
+          price: l.product.price,
+          image: l.product.images[0] || l.product.image,
+          categoryName: l.product.categoryName,
+          slug: l.product.slug,
+        }))
+      )}`;
       const adminUrl = `${origin}/admin?order=${encodeURIComponent(respuesta.reference)}`;
 
       const order: Order = {
@@ -224,6 +241,7 @@ export function CheckoutView() {
         respuesta.reference,
         lines,
         subtotal,
+        previewUrl,
         adminUrl
       );
       const urlWa = whatsappUrl(mensaje);
