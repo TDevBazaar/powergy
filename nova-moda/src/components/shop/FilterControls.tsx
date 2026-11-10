@@ -103,7 +103,7 @@ export function FilterControls({
         </Group>
       )}
 
-      <Group title={`Precio hasta $${Math.round(precioActual)}`}>
+      <Group title={`Precio hasta $${Math.round(precioActual)} USD`}>
         <Slider
           value={[precioActual]}
           min={0}

@@ -456,7 +456,7 @@ function renderCollageJsx(
                   </span>
                   <span
                     style={{
-                      fontSize: 22,
+                      fontSize: 19,
                       fontWeight: 700,
                       color: "#221C15",
                       marginTop: 14,
@@ -542,11 +542,11 @@ function renderCollageJsx(
                     }}
                   >
                     <span style={{ fontSize: 11, color: "#786957" }}>
-                      {truncateText(tile.line.categoryName, 16)}
+                      {truncateText(tile.line.categoryName, 11)}
                     </span>
                     <span
                       style={{
-                        fontSize: 16,
+                        fontSize: 14,
                         fontWeight: 700,
                         color: "#221C15",
                       }}
@@ -615,7 +615,7 @@ function renderCollageJsx(
                   </span>
                   <span
                     style={{
-                      fontSize: 16,
+                      fontSize: 14,
                       fontWeight: 700,
                       color: "#221C15",
                     }}
@@ -699,7 +699,7 @@ function renderCollageJsx(
                   </div>
                   <span
                     style={{
-                      fontSize: 15,
+                      fontSize: 13,
                       fontWeight: 700,
                       color: "#221C15",
                     }}

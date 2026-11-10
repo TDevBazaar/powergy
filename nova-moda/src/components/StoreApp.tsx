@@ -48,7 +48,7 @@ function CurrentView() {
       );
     case "categoria": {
       const id = second;
-      return id ? <CategoryView categoryId={id} /> : <NotFoundView />;
+      return id ? <CategoryView key={id} categoryId={id} /> : <NotFoundView />;
     }
     case "producto":
       return second ? <ProductDetailView productId={second} /> : <NotFoundView />;

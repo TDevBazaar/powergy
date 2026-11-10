@@ -6,7 +6,6 @@ import {
   HelpCircle,
   MessageSquare,
   Phone,
-  RotateCcw,
   Send,
   ShieldCheck,
 } from "lucide-react";
@@ -26,7 +25,6 @@ import { toast } from "sonner";
 const SUBJECTS = [
   "Consulta sobre un producto",
   "Estado de mi pedido",
-  "Devoluciones y cambios",
   "Envíos y entregas",
   "Otro asunto",
 ];
@@ -42,15 +40,11 @@ const FAQ = [
   },
   {
     q: "¿Cuánto cuesta el envío?",
-    a: "Los pedidos superiores a $75,00 tienen envío estándar gratis. Para el resto de casos te confirmamos el coste y el tiempo estimado por WhatsApp antes de cerrar el pedido.",
+    a: "Te confirmamos el coste exacto y el tiempo estimado del envío por WhatsApp antes de cerrar tu pedido.",
   },
   {
     q: "¿Dónde se guardan mis datos?",
     a: "El carrito y los favoritos se guardan en tu navegador. Los datos de entrega que escribes en el formulario solo se envían en el mensaje de WhatsApp junto a la referencia de tu pedido.",
-  },
-  {
-    q: "¿Puedo cambiar o devolver un artículo?",
-    a: "Sí: escríbenos por WhatsApp dentro de los 30 días posteriores a la entrega y gestionamos el cambio o la devolución contigo.",
   },
 ];
 
@@ -67,7 +61,6 @@ export function ContactView() {
 
     const datos = new FormData(form);
     const nombre = String(datos.get("nombre") ?? "").trim();
-    const correo = String(datos.get("correo") ?? "").trim();
     const asunto = String(datos.get("asunto") ?? "").trim();
     const mensaje = String(datos.get("mensaje") ?? "").trim();
 
@@ -76,7 +69,6 @@ export function ContactView() {
       "",
       `Asunto: ${asunto}`,
       `Nombre: ${nombre}`,
-      `Correo: ${correo}`,
       "",
       mensaje,
     ].join("\n");
@@ -99,7 +91,7 @@ export function ContactView() {
           Contacto
         </h1>
         <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
-          Escríbenos por cualquier duda sobre productos, pedidos o cambios. El
+          Escríbenos por cualquier duda sobre productos, pedidos o entregas. El
           formulario abre WhatsApp con tu mensaje listo para enviar.
         </p>
       </header>
@@ -118,7 +110,7 @@ export function ContactView() {
             </p>
           )}
           <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={submit}>
-            <div>
+            <div className="sm:col-span-2">
               <Label htmlFor="c-name">Nombre *</Label>
               <Input
                 id="c-name"
@@ -126,17 +118,6 @@ export function ContactView() {
                 required
                 minLength={3}
                 placeholder="Tu nombre"
-                className="mt-1.5 h-11 rounded-2xl border-input bg-background"
-              />
-            </div>
-            <div>
-              <Label htmlFor="c-email">Correo *</Label>
-              <Input
-                id="c-email"
-                name="correo"
-                type="email"
-                required
-                placeholder="tu@correo.com"
                 className="mt-1.5 h-11 rounded-2xl border-input bg-background"
               />
             </div>
@@ -185,17 +166,12 @@ export function ContactView() {
             {
               icon: Phone,
               title: "WhatsApp",
-              lines: [`+${WHATSAPP_PHONE}`, "Pedidos, cambios y consultas"],
+              lines: [`+${WHATSAPP_PHONE}`, "Pedidos y consultas"],
             },
             {
               icon: Clock,
               title: "Horario",
               lines: ["Lunes a viernes: 9:00 – 18:00", "Sábados: 10:00 – 14:00"],
-            },
-            {
-              icon: RotateCcw,
-              title: "Cambios y devoluciones",
-              lines: ["30 días desde la entrega", "Gestionados por WhatsApp"],
             },
             {
               icon: ShieldCheck,

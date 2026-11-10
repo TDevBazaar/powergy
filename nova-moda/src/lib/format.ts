@@ -1,9 +1,9 @@
 /* ── Formato de precios, fechas y costes de envío (demo) ─────── */
 import type { ShippingMethod } from "./types";
 
-/** Precio en formato "$45.99" */
+/** Precio en formato "$45.99 USD" */
 export function formatPrice(n: number): string {
-  return `$${(Math.round(n * 100) / 100).toFixed(2)}`;
+  return `$${(Math.round(n * 100) / 100).toFixed(2)} USD`;
 }
 
 /** Precio o "Consultar" cuando todavía no está definido (0) */
@@ -40,7 +40,9 @@ export const SHIPPING_OPTIONS: {
 /** Coste de envío: el precio se confirma por WhatsApp */
 export function shippingCostFor(
   _subtotal: number,
-  _method: ShippingMethod = "estandar"
+  _method?: ShippingMethod
 ): number {
+  void _subtotal;
+  void _method;
   return 0;
 }

@@ -130,7 +130,17 @@ export function Footer() {
       <div className="border-t border-border/70">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-4 py-5 text-[11.5px] text-muted-foreground sm:flex-row sm:px-6">
           <p>© 2026 NOVA MODA · Todos los derechos reservados</p>
-          <p>Next.js · TypeScript · Tailwind CSS</p>
+          <p>
+            Web creada por{" "}
+            <a
+              href="https://tdevbazaar.github.io/Bazaar/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-foreground underline-offset-4 transition hover:text-camel-deep hover:underline"
+            >
+              DevBazaar
+            </a>
+          </p>
         </div>
       </div>
     </footer>

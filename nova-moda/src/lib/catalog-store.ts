@@ -281,16 +281,17 @@ export const useCatalogStore = create<CatalogState>((set, get) => ({
     inFlightCategoryPreviews.add(clean);
     const catMap = buildCategoryMap(state.categories);
 
-    fetchProductsPage({ categories: [clean], page: 1, pageSize: 1 }, catMap)
+    fetchProductsPage({ categories: [clean], page: 1, pageSize: 4 }, catMap)
       .then((res) => {
-        const first = res.items[0];
+        const withImage =
+          res.items.find((p) => Boolean(p.image?.trim())) ?? res.items[0];
         set((curr) => ({
           categoryPreviews: {
             ...curr.categoryPreviews,
-            [clean]: first?.image ?? "",
+            [clean]: withImage?.image ?? "",
           },
-          productsById: first
-            ? mergeProducts(curr.productsById, [first])
+          productsById: withImage
+            ? mergeProducts(curr.productsById, [withImage])
             : curr.productsById,
         }));
       })
