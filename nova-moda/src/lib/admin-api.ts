@@ -52,6 +52,8 @@ export interface AdminOrderListItem {
   cancellationReason: string | null;
   hasUnpricedItems: boolean;
   items: AdminOrderLine[];
+  referralCode?: string | null;
+  referredByAdminName?: string | null;
 }
 
 export interface AdminOrder {
@@ -70,6 +72,22 @@ export interface AdminOrder {
   items: AdminOrderLine[];
   removedItems: AdminRemovedLine[];
   history: AdminOrderHistory[];
+  referralCode?: string | null;
+  referredByAdminName?: string | null;
+}
+
+export interface AdminSellerProfile {
+  id: string;
+  email: string | null;
+  displayName: string | null;
+  referralCode: string | null;
+  whatsAppPhone: string | null;
+}
+
+export interface UpdateAdminSellerProfilePayload {
+  displayName: string | null;
+  referralCode: string | null;
+  whatsAppPhone: string | null;
 }
 
 export interface OrderMetrics {
@@ -205,6 +223,24 @@ export function fetchOrderMetrics(
 
 export function fetchOrder(token: string, id: string): Promise<AdminOrder> {
   return apiGet<AdminOrder>(`admin/orders/${encodeURIComponent(id)}?${STORE_QUERY}`, token);
+}
+
+export function fetchAdminSellerProfile(
+  token: string,
+  signal?: AbortSignal
+): Promise<AdminSellerProfile> {
+  return apiGet<AdminSellerProfile>("admin/profile", token, signal);
+}
+
+export function updateAdminSellerProfile(
+  token: string,
+  payload: UpdateAdminSellerProfilePayload
+): Promise<AdminSellerProfile> {
+  return apiSend<AdminSellerProfile>("admin/profile", {
+    method: "PUT",
+    body: payload,
+    token,
+  });
 }
 
 export function createProduct(

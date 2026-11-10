@@ -69,6 +69,21 @@ public sealed class CustomerOrderService(
                 "Uno o más productos ya no están disponibles. Actualiza el catálogo e inténtalo de nuevo.");
         }
 
+        var normalizedReferral = SellerMappings.NormalizeCodeOrNull(request.ReferralCode);
+        AdminUser? referredSeller = null;
+        if (normalizedReferral is not null && SellerMappings.IsValidCode(normalizedReferral))
+        {
+            referredSeller = await db.AdminUsers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    admin => admin.IsActive
+                        && admin.Role == "admin"
+                        && admin.ReferralCode == normalizedReferral
+                        && admin.WhatsAppPhone != null
+                        && admin.WhatsAppPhone != "",
+                    cancellationToken);
+        }
+
         var now = DateTime.UtcNow;
         var order = new CustomerOrder
         {
@@ -76,6 +91,8 @@ public sealed class CustomerOrderService(
             IdempotencyKey = request.IdempotencyKey,
             Store = store,
             Status = CustomerOrderStatuses.Requested,
+            ReferralCode = referredSeller?.ReferralCode,
+            ReferredByAdminUserId = referredSeller?.Id,
             CreatedAt = now,
             Lines = items.Select(item =>
             {
@@ -131,6 +148,7 @@ public sealed class CustomerOrderService(
             order.Lines.Count,
             order.EstimatedTotalUsd);
 
+        order.ReferredByAdminUser = referredSeller;
         return CustomerOrderMappings.ToResponse(order);
     }
 
@@ -169,6 +187,7 @@ public sealed class CustomerOrderService(
         var totalItems = await query.CountAsync(cancellationToken);
         var page = await query
             .Include(order => order.Lines)
+            .Include(order => order.ReferredByAdminUser)
             .OrderByDescending(order => order.CreatedAt)
             .ThenByDescending(order => order.Id)
             .Skip((request.Page - 1) * request.PageSize)
@@ -193,6 +212,7 @@ public sealed class CustomerOrderService(
             .AsNoTracking()
             .Include(item => item.Lines)
             .Include(item => item.StatusHistory)
+            .Include(item => item.ReferredByAdminUser)
             .FirstOrDefaultAsync(
                 item => item.Id == id && item.Store == tienda,
                 cancellationToken);
@@ -234,6 +254,7 @@ public sealed class CustomerOrderService(
         var order = await db.CustomerOrders
             .Include(item => item.Lines)
             .Include(item => item.StatusHistory)
+            .Include(item => item.ReferredByAdminUser)
             .FirstOrDefaultAsync(
                 item => item.Id == id && item.Store == tienda,
                 cancellationToken)
@@ -463,6 +484,7 @@ public sealed class CustomerOrderService(
             .AsNoTracking()
             .Include(order => order.Lines)
             .Include(order => order.StatusHistory)
+            .Include(order => order.ReferredByAdminUser)
             .FirstOrDefaultAsync(
                 order => order.IdempotencyKey == idempotencyKey,
                 cancellationToken);

@@ -7,7 +7,9 @@ import {
   Boxes,
   Calendar,
   CheckCircle2,
+  Copy,
   Eye,
+  Link2,
   Loader2,
   Pencil,
   Plus,
@@ -47,6 +49,7 @@ import { PaginationControls } from "@/components/shop/PaginationControls";
 import { QuantityStepper } from "@/components/shop/QuantityStepper";
 import { formatDate, formatPrice, formatPriceLabel } from "@/lib/format";
 import {
+  ApiError,
   fetchCatalogMeta,
   fetchProductsByIds,
   slugify,
@@ -64,14 +67,23 @@ import {
   fetchAdminCategories,
   fetchAdminOrders,
   fetchAdminProducts,
+  fetchAdminSellerProfile,
   fetchOrder,
   fetchOrderMetrics,
+  updateAdminSellerProfile,
   updateCategory,
   updateProduct,
   type AdminOrder,
   type AdminOrderListItem,
+  type AdminSellerProfile,
   type OrderMetrics,
 } from "@/lib/admin-api";
+import {
+  buildShareReferralUrl,
+  normalizeReferralCode,
+  sanitizeReferralCodeInput,
+} from "@/lib/referral";
+import { normalizeWhatsAppPhone } from "@/lib/whatsapp";
 import {
   DEFAULT_ORDER_DATE_FILTER,
   resolveOrderDateFilter,
@@ -219,6 +231,18 @@ export function AdminView() {
 
   const [panelError, setPanelError] = useState("");
 
+  /* ── Enlace de vendedor del administrador ───────────────────── */
+  const [sellerProfile, setSellerProfile] = useState<AdminSellerProfile | null>(null);
+  const [sellerEndpointAvailable, setSellerEndpointAvailable] = useState(true);
+  const [cargandoPerfil, setCargandoPerfil] = useState(false);
+  const [guardandoPerfil, setGuardandoPerfil] = useState(false);
+  const [perfilError, setPerfilError] = useState("");
+  const [formPerfil, setFormPerfil] = useState({
+    displayName: "",
+    referralCode: "",
+    whatsAppPhone: "",
+  });
+
   /* ── Búsqueda y formularios ─────────────────────────────────── */
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -262,7 +286,8 @@ export function AdminView() {
     [dateFilter]
   );
 
-  const cargando = cargandoProductos || cargandoCategorias || cargandoPedidos;
+  const cargando =
+    cargandoProductos || cargandoCategorias || cargandoPedidos || cargandoPerfil;
 
   /* ── Sesión de Supabase ─────────────────────────────────────── */
   useEffect(() => {
@@ -320,6 +345,10 @@ export function AdminView() {
     setCategories([]);
     setOrders([]);
     setMetrics(null);
+    setSellerProfile(null);
+    setSellerEndpointAvailable(true);
+    setPerfilError("");
+    setFormPerfil({ displayName: "", referralCode: "", whatsAppPhone: "" });
   };
 
   const recargarTodo = useCallback((withCatalogSync = false) => {
@@ -491,6 +520,47 @@ export function AdminView() {
     resolvedDates.validationError,
   ]);
 
+  /* ── Perfil de enlace y WhatsApp del administrador actual ────── */
+  useEffect(() => {
+    if (!token) return;
+    let activo = true;
+    const controller = new AbortController();
+    setCargandoPerfil(true);
+    setPerfilError("");
+
+    fetchAdminSellerProfile(token, controller.signal)
+      .then((profile) => {
+        if (!activo) return;
+        setSellerEndpointAvailable(true);
+        setSellerProfile(profile);
+        setFormPerfil({
+          displayName: profile.displayName ?? "",
+          referralCode: profile.referralCode ?? "",
+          whatsAppPhone: profile.whatsAppPhone ?? "",
+        });
+      })
+      .catch((error) => {
+        if (!activo || isAbortError(error)) return;
+        if (
+          error instanceof ApiError &&
+          (error.status === 404 || error.status === 502)
+        ) {
+          setSellerEndpointAvailable(false);
+          setSellerProfile(null);
+          return;
+        }
+        setPerfilError(mensajeError(error));
+      })
+      .finally(() => {
+        if (activo) setCargandoPerfil(false);
+      });
+
+    return () => {
+      activo = false;
+      controller.abort();
+    };
+  }, [token, refreshTick]);
+
   /* ── Resolución de miniaturas dentro de "Ver solicitud" ─────── */
   const resolverImagenesSolicitud = useCallback(
     async (currentToken: string, order: AdminOrder) => {
@@ -657,6 +727,8 @@ export function AdminView() {
             cancellationReason: completa.cancellationReason,
             hasUnpricedItems: completa.hasUnpricedItems,
             items: completa.items,
+            referralCode: completa.referralCode,
+            referredByAdminName: completa.referredByAdminName,
           });
           setDetalle(completa);
           setItemsEdicion(
@@ -1041,6 +1113,110 @@ export function AdminView() {
     }
   };
 
+  /* ── Enlace de vendedor ─────────────────────────────────────── */
+  const copiarEnlacePersonal = async (codigo?: string | null) => {
+    const clean = normalizeReferralCode(codigo ?? sellerProfile?.referralCode);
+    if (!clean) {
+      setActiveTab("enlace");
+      toast.info("Configura primero tu código y tu WhatsApp.");
+      return;
+    }
+    const url = buildShareReferralUrl(clean, "/");
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Enlace copiado", { description: url });
+    } catch {
+      toast.info("Copia manualmente tu enlace:", { description: url });
+    }
+  };
+
+  const guardarPerfilVendedor = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!token) return;
+
+    const displayName = formPerfil.displayName.trim() || null;
+    const rawCode = formPerfil.referralCode.trim();
+    const rawPhone = formPerfil.whatsAppPhone.trim();
+
+    if (rawCode && !rawPhone) {
+      toast.error("Ingresa tu número de WhatsApp para activar tu enlace.");
+      return;
+    }
+    if (rawPhone && !rawCode) {
+      toast.error("Define un código corto para tu enlace junto con tu WhatsApp.");
+      return;
+    }
+
+    const referralCode = rawCode ? normalizeReferralCode(rawCode) : null;
+    if (rawCode && !referralCode) {
+      toast.error(
+        "El código debe tener entre 2 y 40 caracteres (letras, números, - o _)."
+      );
+      return;
+    }
+
+    const whatsAppPhone = rawPhone ? normalizeWhatsAppPhone(rawPhone) : null;
+    if (rawPhone && !whatsAppPhone) {
+      toast.error(
+        "Ingresa un número de WhatsApp válido con código de país (7 a 15 dígitos)."
+      );
+      return;
+    }
+
+    setGuardandoPerfil(true);
+    setPerfilError("");
+    try {
+      const updated = await updateAdminSellerProfile(token, {
+        displayName,
+        referralCode,
+        whatsAppPhone,
+      });
+      setSellerProfile(updated);
+      setFormPerfil({
+        displayName: updated.displayName ?? "",
+        referralCode: updated.referralCode ?? "",
+        whatsAppPhone: updated.whatsAppPhone ?? "",
+      });
+      toast.success(
+        updated.referralCode
+          ? "Enlace personal y WhatsApp guardados"
+          : "Configuración guardada"
+      );
+    } catch (error) {
+      const msg = mensajeError(error);
+      setPerfilError(msg);
+      toast.error(msg);
+    } finally {
+      setGuardandoPerfil(false);
+    }
+  };
+
+  const desactivarEnlaceVendedor = async () => {
+    if (!token) return;
+    setGuardandoPerfil(true);
+    setPerfilError("");
+    try {
+      const updated = await updateAdminSellerProfile(token, {
+        displayName: formPerfil.displayName.trim() || null,
+        referralCode: null,
+        whatsAppPhone: null,
+      });
+      setSellerProfile(updated);
+      setFormPerfil({
+        displayName: updated.displayName ?? "",
+        referralCode: "",
+        whatsAppPhone: "",
+      });
+      toast.info("Enlace personal desactivado");
+    } catch (error) {
+      const msg = mensajeError(error);
+      setPerfilError(msg);
+      toast.error(msg);
+    } finally {
+      setGuardandoPerfil(false);
+    }
+  };
+
   /* ── Sesión todavía en marcha ───────────────────────────────── */
   if (initializing) {
     return (
@@ -1167,19 +1343,43 @@ export function AdminView() {
             Panel de gestión
           </h1>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => recargarTodo(true)}
-          disabled={cargando}
-          className="h-10 w-full rounded-full border-input bg-card px-5 text-[13px] font-medium sm:h-11 sm:w-auto"
-        >
-          {cargando ? (
-            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-          ) : (
-            <CheckCircle2 className="mr-1.5 h-4 w-4" />
-          )}
-          Actualizar
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          {sellerEndpointAvailable &&
+            (sellerProfile?.referralCode && sellerProfile?.whatsAppPhone ? (
+              <Button
+                variant="outline"
+                onClick={() =>
+                  void copiarEnlacePersonal(sellerProfile.referralCode)
+                }
+                className="h-10 w-full rounded-full border-camel/50 bg-card px-4 text-[13px] font-medium hover:border-camel sm:h-11 sm:w-auto"
+              >
+                <Copy className="mr-1.5 h-3.5 w-3.5 text-camel-deep" />
+                Copiar mi enlace
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={() => setActiveTab("enlace")}
+                className="h-10 w-full rounded-full border-input bg-card px-4 text-[13px] font-medium sm:h-11 sm:w-auto"
+              >
+                <Link2 className="mr-1.5 h-3.5 w-3.5 text-camel-deep" />
+                Mi enlace
+              </Button>
+            ))}
+          <Button
+            variant="outline"
+            onClick={() => recargarTodo(true)}
+            disabled={cargando}
+            className="h-10 w-full rounded-full border-input bg-card px-5 text-[13px] font-medium sm:h-11 sm:w-auto"
+          >
+            {cargando ? (
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+            ) : (
+              <CheckCircle2 className="mr-1.5 h-4 w-4" />
+            )}
+            Actualizar
+          </Button>
+        </div>
       </header>
 
       {panelError && (
@@ -1258,24 +1458,30 @@ export function AdminView() {
         onValueChange={setActiveTab}
         className="mt-7 scroll-mt-24 sm:mt-8"
       >
-        <TabsList className="flex h-auto w-full items-center gap-1 overflow-x-auto rounded-2xl bg-secondary p-1 sm:inline-flex sm:w-fit sm:rounded-full">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-2xl bg-secondary p-1 sm:inline-flex sm:w-fit sm:items-center sm:justify-center sm:rounded-full">
           <TabsTrigger
             value="productos"
-            className="min-w-fit flex-1 shrink-0 rounded-xl px-3 py-2 text-[12.5px] font-medium sm:flex-initial sm:rounded-full sm:px-5 sm:py-1.5 sm:text-[13px]"
+            className="w-full rounded-xl px-3 py-2 text-[12.5px] font-medium sm:w-auto sm:flex-initial sm:rounded-full sm:px-5 sm:py-1.5 sm:text-[13px]"
           >
             Productos ({totalProductosBadge})
           </TabsTrigger>
           <TabsTrigger
             value="categorias"
-            className="min-w-fit flex-1 shrink-0 rounded-xl px-3 py-2 text-[12.5px] font-medium sm:flex-initial sm:rounded-full sm:px-5 sm:py-1.5 sm:text-[13px]"
+            className="w-full rounded-xl px-3 py-2 text-[12.5px] font-medium sm:w-auto sm:flex-initial sm:rounded-full sm:px-5 sm:py-1.5 sm:text-[13px]"
           >
             Categorías ({categories.length})
           </TabsTrigger>
           <TabsTrigger
             value="pedidos"
-            className="min-w-fit flex-1 shrink-0 rounded-xl px-3 py-2 text-[12.5px] font-medium sm:flex-initial sm:rounded-full sm:px-5 sm:py-1.5 sm:text-[13px]"
+            className="w-full rounded-xl px-3 py-2 text-[12.5px] font-medium sm:w-auto sm:flex-initial sm:rounded-full sm:px-5 sm:py-1.5 sm:text-[13px]"
           >
             Solicitudes ({ordersTotalItems})
+          </TabsTrigger>
+          <TabsTrigger
+            value="enlace"
+            className="w-full rounded-xl px-3 py-2 text-[12.5px] font-medium sm:w-auto sm:flex-initial sm:rounded-full sm:px-5 sm:py-1.5 sm:text-[13px]"
+          >
+            Mi enlace
           </TabsTrigger>
         </TabsList>
 
@@ -1833,11 +2039,21 @@ export function AdminView() {
                         <p className="font-mono text-[13px] font-semibold">
                           {o.reference}
                         </p>
-                        {o.hasUnpricedItems && o.status === "requested" && (
-                          <span className="mt-1 inline-block rounded-full bg-camel/15 px-2 py-0.5 text-[10px] font-medium text-camel-deep">
-                            SIN PRECIO
-                          </span>
-                        )}
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {o.hasUnpricedItems && o.status === "requested" && (
+                            <span className="inline-block rounded-full bg-camel/15 px-2 py-0.5 text-[10px] font-medium text-camel-deep">
+                              SIN PRECIO
+                            </span>
+                          )}
+                          {o.referralCode && (
+                            <span
+                              className="inline-block rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+                              title={`Enlace ?v=${o.referralCode}`}
+                            >
+                              Enlace: {o.referredByAdminName || o.referralCode}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3.5 whitespace-nowrap text-muted-foreground">
                         {formatDate(o.createdAt)}
@@ -1917,6 +2133,11 @@ export function AdminView() {
                             SIN PRECIO
                           </span>
                         )}
+                        {o.referralCode && (
+                          <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                            Enlace: {o.referredByAdminName || o.referralCode}
+                          </span>
+                        )}
                       </div>
                       <p className="mt-0.5 text-xs text-muted-foreground">
                         {formatDate(o.createdAt)} · {totalUds}{" "}
@@ -1990,6 +2211,241 @@ export function AdminView() {
             finalizarla puedes ajustar cantidades y precios, quitar líneas y
             dejarla como vendida o cancelada con su motivo.
           </p>
+        </TabsContent>
+
+        {/* ── Mi enlace personalizado ── */}
+        <TabsContent value="enlace" className="mt-5">
+          {!sellerEndpointAvailable ? (
+            <div className="rounded-[1.4rem] border border-dashed border-camel bg-card p-5 shadow-card sm:p-6">
+              <h2 className="text-base font-semibold">
+                Función pendiente de actualizar en el API
+              </h2>
+              <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+                Ejecuta el script SQL{" "}
+                <code className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[12px]">
+                  Sql/20261110-admin-referral-whatsapp.sql
+                </code>{" "}
+                en Supabase y vuelve a publicar{" "}
+                <code className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[12px]">
+                  Powergy.Api
+                </code>{" "}
+                para activar los enlaces personalizados por administrador.
+              </p>
+            </div>
+          ) : (
+            <div className="grid min-w-0 gap-5 lg:grid-cols-[1.15fr_0.85fr]">
+              <form
+                onSubmit={guardarPerfilVendedor}
+                className="min-w-0 rounded-[1.5rem] bg-card p-5 shadow-card sm:p-6"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-base font-semibold">
+                      Tu enlace y WhatsApp de pedidos
+                    </h2>
+                    <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
+                      Quien entre por tu enlace verá la misma tienda y, al
+                      confirmar un pedido, WhatsApp se abrirá con tu número.
+                    </p>
+                  </div>
+                  {cargandoPerfil && (
+                    <Loader2 className="h-4 w-4 animate-spin text-camel-deep" />
+                  )}
+                </div>
+
+                {perfilError && (
+                  <p className="mt-4 rounded-2xl bg-destructive/10 p-3 text-[12px] leading-relaxed text-destructive">
+                    {perfilError}
+                  </p>
+                )}
+
+                <div className="mt-5 grid min-w-0 gap-4">
+                  <div className="min-w-0">
+                    <Label htmlFor="seller-name">Nombre visible (opcional)</Label>
+                    <Input
+                      id="seller-name"
+                      value={formPerfil.displayName}
+                      onChange={(e) =>
+                        setFormPerfil((prev) => ({
+                          ...prev,
+                          displayName: e.target.value,
+                        }))
+                      }
+                      maxLength={100}
+                      placeholder="Ej. Carlos Pérez"
+                      className="mt-1.5 h-11 rounded-2xl border-input bg-background"
+                    />
+                  </div>
+
+                  <div className="min-w-0">
+                    <Label htmlFor="seller-code">Código de tu enlace *</Label>
+                    <Input
+                      id="seller-code"
+                      value={formPerfil.referralCode}
+                      onChange={(e) =>
+                        setFormPerfil((prev) => ({
+                          ...prev,
+                          referralCode: sanitizeReferralCodeInput(e.target.value),
+                        }))
+                      }
+                      maxLength={40}
+                      placeholder="carlos"
+                      className="mt-1.5 h-11 rounded-2xl border-input bg-background font-mono text-sm"
+                    />
+                    <p className="mt-1.5 text-[11.5px] text-muted-foreground">
+                      De 2 a 40 caracteres en minúscula (letras, números,{" "}
+                      <code className="font-mono">-</code> o{" "}
+                      <code className="font-mono">_</code>).
+                    </p>
+                  </div>
+
+                  <div className="min-w-0">
+                    <Label htmlFor="seller-phone">
+                      Número de WhatsApp (con código de país) *
+                    </Label>
+                    <Input
+                      id="seller-phone"
+                      value={formPerfil.whatsAppPhone}
+                      onChange={(e) =>
+                        setFormPerfil((prev) => ({
+                          ...prev,
+                          whatsAppPhone: e.target.value,
+                        }))
+                      }
+                      maxLength={30}
+                      inputMode="tel"
+                      placeholder="5359749037"
+                      className="mt-1.5 h-11 rounded-2xl border-input bg-background font-mono text-sm"
+                    />
+                    <p className="mt-1.5 text-[11.5px] text-muted-foreground">
+                      Solo se usa cuando el cliente finaliza un pedido. El
+                      formulario de Contacto y el pie de página siguen usando el
+                      número principal de la tienda.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex flex-wrap gap-2.5">
+                  <Button
+                    type="submit"
+                    disabled={guardandoPerfil}
+                    className="h-11 rounded-full px-6 text-[13px] font-semibold"
+                  >
+                    {guardandoPerfil ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Guardando…
+                      </>
+                    ) : (
+                      "Guardar enlace"
+                    )}
+                  </Button>
+                  {sellerProfile?.referralCode && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={guardandoPerfil}
+                      onClick={() => void desactivarEnlaceVendedor()}
+                      className="h-11 rounded-full border-input bg-card px-5 text-[13px]"
+                    >
+                      Desactivar enlace
+                    </Button>
+                  )}
+                </div>
+              </form>
+
+              <aside className="min-w-0 space-y-4">
+                <div className="rounded-[1.5rem] bg-card p-5 shadow-card sm:p-6">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="flex items-center gap-2 text-sm font-semibold">
+                      <Link2 className="h-4 w-4 text-camel-deep" />
+                      Enlace para compartir
+                    </h3>
+                    {sellerProfile?.referralCode &&
+                    sellerProfile?.whatsAppPhone ? (
+                      <span className="rounded-full bg-[#4E5B48]/15 px-2.5 py-0.5 text-[11px] font-semibold text-[#4E5B48]">
+                        Activo
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-secondary px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                        Sin activar
+                      </span>
+                    )}
+                  </div>
+
+                  {sellerProfile?.referralCode && sellerProfile?.whatsAppPhone ? (
+                    <>
+                      <div className="mt-3 rounded-2xl bg-secondary/70 p-3 font-mono text-[12px] break-all text-foreground">
+                        {buildShareReferralUrl(sellerProfile.referralCode, "/")}
+                      </div>
+                      <Button
+                        type="button"
+                        onClick={() =>
+                          void copiarEnlacePersonal(sellerProfile.referralCode)
+                        }
+                        className="mt-3 h-10 w-full rounded-full text-[13px] font-medium"
+                      >
+                        <Copy className="mr-1.5 h-3.5 w-3.5" />
+                        Copiar mi enlace
+                      </Button>
+                      {(formPerfil.referralCode.trim() !==
+                        (sellerProfile.referralCode ?? "") ||
+                        normalizeWhatsAppPhone(formPerfil.whatsAppPhone) !==
+                          (sellerProfile.whatsAppPhone ?? null)) && (
+                        <p className="mt-2.5 text-[11.5px] text-camel-deep">
+                          Tienes cambios sin guardar en el formulario.
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <div className="mt-3 rounded-2xl bg-secondary/60 p-3.5 text-[12.5px] leading-relaxed text-muted-foreground">
+                      {formPerfil.referralCode.trim() ? (
+                        <>
+                          Vista previa:{" "}
+                          <span className="font-mono break-all text-foreground">
+                            {buildShareReferralUrl(
+                              formPerfil.referralCode.trim(),
+                              "/"
+                            )}
+                          </span>
+                          . Pulsa <strong>Guardar enlace</strong> para activarlo.
+                        </>
+                      ) : (
+                        "Define tu código corto y tu número de WhatsApp para generar tu enlace personal."
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-[1.5rem] bg-card p-5 shadow-card sm:p-6">
+                  <h3 className="text-sm font-semibold">¿Cómo funciona?</h3>
+                  <ul className="mt-3 space-y-2 text-[12.5px] leading-relaxed text-muted-foreground">
+                    <li>
+                      • Cualquier página admite tu parámetro (por ejemplo,{" "}
+                      <code className="rounded bg-secondary px-1 py-0.5 font-mono text-[11px] text-foreground">
+                        /catalogo?v=
+                        {sellerProfile?.referralCode || "codigo"}
+                      </code>
+                      ).
+                    </li>
+                    <li>
+                      • Cuando el cliente entra por tu enlace, queda asociado en
+                      su navegador durante <strong>7 días</strong> aunque cierre
+                      o siga navegando por la tienda.
+                    </li>
+                    <li>
+                      • Si entra después por el enlace de otro administrador, se
+                      actualiza al más reciente.
+                    </li>
+                    <li>
+                      • Las solicitudes registradas con tu enlace también quedan
+                      marcadas aquí en <strong>Solicitudes</strong>.
+                    </li>
+                  </ul>
+                </div>
+              </aside>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 
@@ -2321,6 +2777,18 @@ export function AdminView() {
                     {formatPriceLabel(detalle.estimatedTotalUsd ?? 0)}
                   </p>
                 </div>
+                {detalle.referralCode && (
+                  <div className="col-span-2 min-w-0 sm:col-span-3">
+                    <p className="text-[11px] text-muted-foreground">
+                      Enlace de vendedor
+                    </p>
+                    <p className="font-medium break-words">
+                      {detalle.referredByAdminName
+                        ? `${detalle.referredByAdminName} (?v=${detalle.referralCode})`
+                        : `?v=${detalle.referralCode}`}
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Líneas */}

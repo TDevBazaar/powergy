@@ -36,6 +36,7 @@ import {
   buildOrderPreviewImagePath,
   buildOrderPreviewPath,
 } from "@/lib/order-preview";
+import { resolveActiveReferralForCheckout } from "@/lib/referral";
 import { whatsappUrl } from "@/lib/whatsapp";
 import type { CartLine, Order } from "@/lib/types";
 
@@ -81,6 +82,7 @@ export function CheckoutView() {
   const clearCart = useNova((s) => s.clearCart);
   const [confirmed, setConfirmed] = useState<Order | null>(null);
   const [whatsappLink, setWhatsappLink] = useState<string>("");
+  const [confirmedPhone, setConfirmedPhone] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const [previewImage, setPreviewImage] = useState<PreviewImageData | null>(null);
@@ -116,6 +118,12 @@ export function CheckoutView() {
     void fetch(warmupPath, { signal: controller.signal }).catch(() => {});
     return () => controller.abort();
   }, [confirmed, warmupPath]);
+
+  // Refresca en segundo plano el teléfono del vendedor referido antes de confirmar
+  useEffect(() => {
+    if (confirmed || lines.length === 0) return;
+    void resolveActiveReferralForCheckout(1500);
+  }, [confirmed, lines.length]);
 
   if (confirmed) {
     return (
@@ -157,7 +165,7 @@ export function CheckoutView() {
           </div>
           <div className="mt-7 flex flex-col gap-2.5 sm:flex-row sm:justify-center">
             <Button asChild className="h-11 rounded-full px-6 text-sm font-medium">
-              <a href={whatsappLink || whatsappUrl("Hola NOVA MODA")}>
+              <a href={whatsappLink || whatsappUrl("Hola NOVA MODA", confirmedPhone)}>
                 <MessageCircle className="mr-2 h-4 w-4" />
                 Continuar en WhatsApp
               </a>
@@ -216,11 +224,13 @@ export function CheckoutView() {
     setSending(true);
     setSendError("");
     try {
+      const referral = await resolveActiveReferralForCheckout(1500);
       const respuesta = await apiSend<ApiOrder>("orders", {
         method: "POST",
         body: {
           store: NOVA_STORE,
           idempotencyKey: crypto.randomUUID(),
+          referralCode: referral?.code || undefined,
           items: lines.map((l) => ({
             productId: l.productId,
             quantity: l.qty,
@@ -259,7 +269,9 @@ export function CheckoutView() {
         previewUrl,
         adminUrl
       );
-      const urlWa = whatsappUrl(mensaje);
+      const sellerPhone = referral?.whatsAppPhone ?? null;
+      setConfirmedPhone(sellerPhone);
+      const urlWa = whatsappUrl(mensaje, sellerPhone);
       setWhatsappLink(urlWa);
 
       clearCart();

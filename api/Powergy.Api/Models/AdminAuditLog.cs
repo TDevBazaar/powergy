@@ -20,6 +20,7 @@ public static class AuditEntityTypes
 {
     public const string Product = "product";
     public const string Category = "category";
+    public const string AdminProfile = "admin_profile";
 }
 
 public static class AuditActions

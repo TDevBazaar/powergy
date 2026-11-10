@@ -86,6 +86,11 @@ namespace Powergy.Api.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
+                    b.Property<string>("DisplayName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("display_name");
+
                     b.Property<string>("Email")
                         .HasMaxLength(320)
                         .HasColumnType("character varying(320)")
@@ -94,6 +99,11 @@ namespace Powergy.Api.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
+
+                    b.Property<string>("ReferralCode")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("referral_code");
 
                     b.Property<string>("Role")
                         .IsRequired()
@@ -105,7 +115,16 @@ namespace Powergy.Api.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("supabase_user_id");
 
+                    b.Property<string>("WhatsAppPhone")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("whatsapp_phone");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("ReferralCode")
+                        .IsUnique()
+                        .HasFilter("\"referral_code\" IS NOT NULL");
 
                     b.HasIndex("SupabaseUserId")
                         .IsUnique();
@@ -246,6 +265,15 @@ namespace Powergy.Api.Migrations
                         .HasColumnType("numeric(12,2)")
                         .HasColumnName("original_estimated_total_usd");
 
+                    b.Property<string>("ReferralCode")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("referral_code");
+
+                    b.Property<Guid?>("ReferredByAdminUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("referred_by_admin_user_id");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -264,6 +292,8 @@ namespace Powergy.Api.Migrations
 
                     b.HasIndex("IdempotencyKey")
                         .IsUnique();
+
+                    b.HasIndex("ReferredByAdminUserId");
 
                     b.HasIndex("Store", "ClosedAt");
 
@@ -514,7 +544,14 @@ namespace Powergy.Api.Migrations
                         .HasForeignKey("ClosedByAdminUserId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("Powergy.Api.Models.AdminUser", "ReferredByAdminUser")
+                        .WithMany("ReferredOrders")
+                        .HasForeignKey("ReferredByAdminUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("ClosedByAdminUser");
+
+                    b.Navigation("ReferredByAdminUser");
                 });
 
             modelBuilder.Entity("Powergy.Api.Models.CustomerOrderLine", b =>
@@ -562,6 +599,8 @@ namespace Powergy.Api.Migrations
                     b.Navigation("AuditLogs");
 
                     b.Navigation("ClosedOrders");
+
+                    b.Navigation("ReferredOrders");
 
                     b.Navigation("RemovedOrderLines");
                 });

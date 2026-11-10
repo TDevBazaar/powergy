@@ -97,6 +97,8 @@ export interface ApiOrder {
   hasUnpricedItems: boolean;
   items: ApiOrderLine[];
   removedItems?: ApiOrderLine[];
+  referralCode?: string | null;
+  referredByAdminName?: string | null;
 }
 
 /* ── Mapeo al modelo de la tienda ─────────────────────────────── */

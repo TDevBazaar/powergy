@@ -6,8 +6,8 @@ ASP.NET Core 10 API with Entity Framework Core Code First and PostgreSQL on Supa
 
 - `categories`: catalog categories, URL slug, display order, owning store and active state.
 - `products`: catalog fields, nullable USD price, offer/service flags, image path, bestseller rank, owning store and active state.
-- `admin_users`: allowlist of Supabase Auth user IDs authorized to administer the catalog.
-- `customer_orders`: catalog order requests recorded before the customer opens WhatsApp, with an idempotency key, owning store, status, estimated total, the original estimated total and closure metadata (acting administrator, cancellation reason and note).
+- `admin_users`: allowlist of Supabase Auth user IDs authorized to administer the catalog, plus optional personal referral profile (`display_name`, `referral_code`, `whatsapp_phone`).
+- `customer_orders`: catalog order requests recorded before the customer opens WhatsApp, with an idempotency key, owning store, status, optional referral attribution (`referral_code`, `referred_by_admin_user_id`), estimated total, the original estimated total and closure metadata (acting administrator, cancellation reason and note).
 - `customer_order_lines`: snapshot of the requested products (name, slug, category, quantity and unit price) for each order. Lines removed while closing keep `original_quantity`, `removed_at` and `removed_by_admin_user_id` so the request history is never lost.
 - `customer_order_status_history`: append-only status transitions with the acting administrator and timestamp.
 - `admin_audit_log`: administrative audit trail for catalog and category changes, with the acting administrator, entity, action and a JSON diff of the changed fields.
@@ -98,7 +98,7 @@ When no direct database connection is available (for example, during a guided pr
 dotnet ef migrations script --idempotent --project .\Powergy.Api --output .\Powergy.Api\Sql\<date>-<change>.sql
 ```
 
-The generated script only applies pending migrations, because every step is guarded by the `__EFMigrationsHistory` table. `Sql/20261017-audit-order-finalization.sql` is the script for the audit trail, the order-finishing columns and the line-preservation columns; it also backfills `original_quantity` and `original_estimated_total_usd` for existing rows.
+The generated script only applies pending migrations, because every step is guarded by the `__EFMigrationsHistory` table. `Sql/20261017-audit-order-finalization.sql` is the script for the audit trail, the order-finishing columns and the line-preservation columns; it also backfills `original_quantity` and `original_estimated_total_usd` for existing rows. `Sql/20261110-admin-referral-whatsapp.sql` adds per-administrator referral links and WhatsApp routing columns (`admin_users.display_name`, `referral_code`, `whatsapp_phone` and `customer_orders.referral_code`, `referred_by_admin_user_id`).
 
 ## Observability
 
@@ -131,7 +131,9 @@ Product POST requests accept an optional `id`; this allows importing the existin
 - `GET /api/products/{slug}` — active product; supports `store`.
 - `GET /api/categories/admin` and `GET /api/products/admin` — admin catalog views.
 - `POST`, `PUT` and `DELETE` under `/api/categories` and `/api/products` — admin-only category/product management. DELETE deactivates rather than permanently removing records.
-- `POST /api/orders` — records an idempotent WhatsApp order request for the catalog cart.
+- `GET /api/sellers/{code}` — public lookup resolving an active administrator's referral link code (`?v=<code>`) to their display name and WhatsApp phone number (`Cache-Control: no-store`).
+- `POST /api/orders` — records an idempotent WhatsApp order request for the catalog cart (accepts optional `referralCode` to attribute the order).
+- `GET /api/admin/profile` and `PUT /api/admin/profile` — lets each signed-in administrator configure their own display name, shareable referral code (`?v=<code>`) and WhatsApp phone number.
 - `GET /api/admin/orders`, `GET /api/admin/orders/metrics`, `GET /api/admin/orders/{id}` and `POST /api/admin/orders/{id}/close` — admin-only listing, statistics, detail and closure of order requests. Closing accepts `closed` (sale) or `cancelled` (with `cancellationReason` and optional `cancellationNote`), plus the final `items` array where the administrator can adjust quantities, set the final unit price and remove products. Closing an already closed request is idempotent and returns the stored state.
 - `GET /api/admin/audit` — admin-only audit trail paged by `entityType`, `entityId`, `page` and `pageSize`.
 - `GET /health` — API/database connectivity check.

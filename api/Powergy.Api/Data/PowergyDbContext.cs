@@ -117,10 +117,16 @@ public sealed class PowergyDbContext(DbContextOptions<PowergyDbContext> options)
             entity.Property(admin => admin.Id).HasColumnName("id");
             entity.Property(admin => admin.SupabaseUserId).HasColumnName("supabase_user_id");
             entity.Property(admin => admin.Email).HasColumnName("email").HasMaxLength(320);
+            entity.Property(admin => admin.DisplayName).HasColumnName("display_name").HasMaxLength(100);
+            entity.Property(admin => admin.ReferralCode).HasColumnName("referral_code").HasMaxLength(40);
+            entity.Property(admin => admin.WhatsAppPhone).HasColumnName("whatsapp_phone").HasMaxLength(20);
             entity.Property(admin => admin.Role)
                 .HasColumnName("role").HasMaxLength(40).IsRequired();
             entity.Property(admin => admin.IsActive).HasColumnName("is_active");
             entity.HasIndex(admin => admin.SupabaseUserId).IsUnique();
+            entity.HasIndex(admin => admin.ReferralCode)
+                .IsUnique()
+                .HasFilter("\"referral_code\" IS NOT NULL");
             entity.Property(admin => admin.CreatedAt)
                 .HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
         });
@@ -145,6 +151,10 @@ public sealed class PowergyDbContext(DbContextOptions<PowergyDbContext> options)
             entity.Property(order => order.ClosedAt).HasColumnName("closed_at");
             entity.Property(order => order.ClosedByAdminUserId)
                 .HasColumnName("closed_by_admin_user_id");
+            entity.Property(order => order.ReferralCode)
+                .HasColumnName("referral_code").HasMaxLength(40);
+            entity.Property(order => order.ReferredByAdminUserId)
+                .HasColumnName("referred_by_admin_user_id");
             entity.Property(order => order.CancellationReason)
                 .HasColumnName("cancellation_reason").HasMaxLength(40);
             entity.Property(order => order.CancellationNote)
@@ -152,9 +162,14 @@ public sealed class PowergyDbContext(DbContextOptions<PowergyDbContext> options)
             entity.HasIndex(order => new { order.Store, order.Status, order.CreatedAt, order.Id });
             entity.HasIndex(order => new { order.Store, order.CreatedAt, order.Id });
             entity.HasIndex(order => new { order.Store, order.ClosedAt });
+            entity.HasIndex(order => order.ReferredByAdminUserId);
             entity.HasOne(order => order.ClosedByAdminUser)
                 .WithMany(admin => admin.ClosedOrders)
                 .HasForeignKey(order => order.ClosedByAdminUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(order => order.ReferredByAdminUser)
+                .WithMany(admin => admin.ReferredOrders)
+                .HasForeignKey(order => order.ReferredByAdminUserId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
 

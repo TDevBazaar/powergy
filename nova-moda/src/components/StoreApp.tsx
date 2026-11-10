@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Header } from "@/components/layout/Header";
 import { MobileMenu } from "@/components/layout/MobileMenu";
 import { Footer } from "@/components/layout/Footer";
@@ -14,6 +14,7 @@ import { CheckoutView } from "@/components/views/CheckoutView";
 import { ContactView } from "@/components/views/ContactView";
 import { AdminView } from "@/components/views/AdminView";
 import { EmptyState } from "@/components/shop/EmptyState";
+import { captureReferralFromUrl } from "@/lib/referral";
 import { useRoute } from "@/lib/router";
 import { Compass } from "lucide-react";
 
@@ -73,6 +74,7 @@ const getServerSnapshot = () => false;
 
 export function StoreApp() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const route = useRoute();
   // true solo en cliente: evita desajustes de hidratación con el estado
   // persistido (carrito, favoritos) de Zustand.
   const mounted = useSyncExternalStore(
@@ -80,6 +82,12 @@ export function StoreApp() {
     getClientSnapshot,
     getServerSnapshot
   );
+
+  // Recuerda el enlace del vendedor (?v=codigo) durante varios días al entrar
+  useEffect(() => {
+    if (!mounted) return;
+    captureReferralFromUrl();
+  }, [mounted, route.raw]);
 
   // Evita desajustes de hidratación con el estado persistido (carrito, favoritos)
   if (!mounted) {

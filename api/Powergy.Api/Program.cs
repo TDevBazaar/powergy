@@ -153,6 +153,7 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddScoped<IAuthorizationHandler, AdminAuthorizationHandler>();
 builder.Services.AddScoped<ICurrentAdminAccessor, CurrentAdminAccessor>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
+builder.Services.AddScoped<ISellerService, SellerService>();
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<ICustomerOrderService, CustomerOrderService>();

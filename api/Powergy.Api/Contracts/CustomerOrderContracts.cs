@@ -13,6 +13,10 @@ public sealed record CreateCustomerOrderRequest
     [StringLength(40, MinimumLength = 2)]
     public string? Store { get; init; }
 
+    /// <summary>Código del enlace compartido del administrador que refirió la compra.</summary>
+    [StringLength(40)]
+    public string? ReferralCode { get; init; }
+
     [Required, MinLength(1), MaxLength(20)]
     public required IReadOnlyList<CustomerOrderLineRequest> Items { get; init; }
 }
@@ -130,7 +134,9 @@ public sealed record CustomerOrderResponse(
     bool HasUnpricedItems,
     IReadOnlyList<CustomerOrderLineResponse> Items,
     IReadOnlyList<CustomerOrderRemovedLineResponse> RemovedItems,
-    IReadOnlyList<CustomerOrderHistoryResponse> History);
+    IReadOnlyList<CustomerOrderHistoryResponse> History,
+    string? ReferralCode = null,
+    string? ReferredByAdminName = null);
 
 public sealed record CustomerOrderListItemResponse(
     Guid Id,
@@ -145,7 +151,9 @@ public sealed record CustomerOrderListItemResponse(
     Guid? ClosedByAdminUserId,
     string? CancellationReason,
     bool HasUnpricedItems,
-    IReadOnlyList<CustomerOrderLineResponse> Items);
+    IReadOnlyList<CustomerOrderLineResponse> Items,
+    string? ReferralCode = null,
+    string? ReferredByAdminName = null);
 
 public sealed record CustomerOrderMetricsResponse(
     DateTimeOffset From,
@@ -221,7 +229,11 @@ public static class CustomerOrderMappings
                 history.PreviousStatus,
                 history.Status,
                 history.ChangedByAdminUserId,
-                Utc(history.ChangedAt))).ToArray());
+                Utc(history.ChangedAt))).ToArray(),
+        order.ReferralCode,
+        order.ReferredByAdminUser is null
+            ? null
+            : SellerMappings.DisplayLabel(order.ReferredByAdminUser));
 
     public static CustomerOrderListItemResponse ToListItem(CustomerOrder order)
     {
@@ -239,7 +251,11 @@ public static class CustomerOrderMappings
             order.ClosedByAdminUserId,
             order.CancellationReason,
             activas.Any(line => IsUnpriced(line.UnitPriceUsd)),
-            activas.OrderBy(line => line.ProductName).Select(ToResponse).ToArray());
+            activas.OrderBy(line => line.ProductName).Select(ToResponse).ToArray(),
+            order.ReferralCode,
+            order.ReferredByAdminUser is null
+                ? null
+                : SellerMappings.DisplayLabel(order.ReferredByAdminUser));
     }
 
     public static string Reference(CustomerOrder order) =>

@@ -20,6 +20,9 @@ public sealed class CustomerOrder
 
     public Guid? ClosedByAdminUserId { get; set; }
     public AdminUser? ClosedByAdminUser { get; set; }
+    public string? ReferralCode { get; set; }
+    public Guid? ReferredByAdminUserId { get; set; }
+    public AdminUser? ReferredByAdminUser { get; set; }
     public string? CancellationReason { get; set; }
     public string? CancellationNote { get; set; }
     public ICollection<CustomerOrderLine> Lines { get; set; } = new List<CustomerOrderLine>();

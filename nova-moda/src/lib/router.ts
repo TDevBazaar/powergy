@@ -16,14 +16,16 @@ export interface Route {
   raw: string;
 }
 
+const SERVER_ROUTE: Route = {
+  path: "/",
+  segments: [],
+  query: new URLSearchParams(),
+  raw: "/",
+};
+
 function parseLocation(): Route {
   if (typeof window === "undefined") {
-    return {
-      path: "/",
-      segments: [],
-      query: new URLSearchParams(),
-      raw: "/",
-    };
+    return SERVER_ROUTE;
   }
 
   // Compatibilidad: Si se accede con hash antiguo (p.ej. #/catalogo o /#/admin),
@@ -53,12 +55,7 @@ let lastRoute: Route | null = null;
 
 function getSnapshot(): Route {
   if (typeof window === "undefined") {
-    return {
-      path: "/",
-      segments: [],
-      query: new URLSearchParams(),
-      raw: "/",
-    };
+    return SERVER_ROUTE;
   }
 
   const currentRaw = `${window.location.pathname}${window.location.search}`;
@@ -70,12 +67,7 @@ function getSnapshot(): Route {
 }
 
 function getServerSnapshot(): Route {
-  return {
-    path: "/",
-    segments: [],
-    query: new URLSearchParams(),
-    raw: "/",
-  };
+  return SERVER_ROUTE;
 }
 
 function subscribe(callback: () => void): () => void {
