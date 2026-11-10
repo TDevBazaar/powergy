@@ -51,7 +51,8 @@ function entryHasSnapshot(entry: OrderPreviewItemInput): boolean {
 /** Consulta en lote al API de POWERGY y fusiona con el snapshot embebido en el enlace */
 export async function fetchPreviewOrderData(
   reference: string,
-  rawToken?: string | null
+  rawToken?: string | null,
+  options: { preferSnapshot?: boolean } = {}
 ): Promise<OrderPreviewData> {
   const cleanRef = reference.trim() || "Pedido";
   const entries = decodeOrderPreviewToken(rawToken);
@@ -67,42 +68,44 @@ export async function fetchPreviewOrderData(
 
   const allHaveSnapshot = entries.every(entryHasSnapshot);
   const productMap = new Map<string, ApiProduct>();
-  const apiBase = getPowergyApiBase();
-  const ids = entries.map((e) => e.productId);
 
-  // Si todos los artículos ya traen foto/nombre en el enlace, damos presupuesto rápido al API (1.6s)
-  // para no retrasar WhatsApp ni mostrar fallbacks vacíos cuando Somee tarda en despertar.
-  const attemptTimeoutMs = allHaveSnapshot ? 1600 : 4000;
-  const maxAttempts = allHaveSnapshot ? 1 : 2;
+  // Cuando el enlace ya trae nombre, precio y foto (token v2) y estamos generando
+  // la metadata / imagen Open Graph para WhatsApp, respondemos en 0 ms sin esperar a Somee.
+  if (!(options.preferSnapshot && allHaveSnapshot)) {
+    const apiBase = getPowergyApiBase();
+    const ids = entries.map((e) => e.productId);
+    const attemptTimeoutMs = allHaveSnapshot ? 1600 : 4000;
+    const maxAttempts = allHaveSnapshot ? 1 : 2;
 
-  try {
-    for (let i = 0; i < ids.length; i += 50) {
-      const chunk = ids.slice(i, i + 50);
-      const params = new URLSearchParams({
-        store: NOVA_STORE,
-        ids: chunk.join(","),
-      });
-      const url = `${apiBase}/api/products/batch?${params.toString()}`;
-      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-        try {
-          const res = await fetch(url, {
-            headers: { Accept: "application/json", Connection: "close" },
-            next: { revalidate: 120 },
-            signal: AbortSignal.timeout(attemptTimeoutMs),
-          });
-          if (!res.ok) continue;
-          const items = (await res.json()) as ApiProduct[];
-          for (const item of items) {
-            if (item?.id) productMap.set(item.id, item);
+    try {
+      for (let i = 0; i < ids.length; i += 50) {
+        const chunk = ids.slice(i, i + 50);
+        const params = new URLSearchParams({
+          store: NOVA_STORE,
+          ids: chunk.join(","),
+        });
+        const url = `${apiBase}/api/products/batch?${params.toString()}`;
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+          try {
+            const res = await fetch(url, {
+              headers: { Accept: "application/json", Connection: "close" },
+              next: { revalidate: 120 },
+              signal: AbortSignal.timeout(attemptTimeoutMs),
+            });
+            if (!res.ok) continue;
+            const items = (await res.json()) as ApiProduct[];
+            for (const item of items) {
+              if (item?.id) productMap.set(item.id, item);
+            }
+            break;
+          } catch {
+            /* Respaldo automático con el snapshot embebido en el enlace */
           }
-          break;
-        } catch {
-          /* Respaldo automático con el snapshot embebido en el enlace */
         }
       }
+    } catch {
+      /* Si falla el API, usamos snapshot embebido o respaldo seguro */
     }
-  } catch {
-    /* Si falla el API, usamos snapshot embebido o respaldo seguro */
   }
 
   const lines: OrderPreviewLine[] = entries.map((entry) => {
@@ -258,8 +261,8 @@ export async function fetchSafeOgDataUri(
       headers: {
         Accept: "image/jpeg,image/png,image/webp,image/gif,*/*;q=0.5",
       },
-      signal: AbortSignal.timeout(3500),
-      cache: "force-cache",
+      signal: AbortSignal.timeout(3000),
+      next: { revalidate: 3600 },
     });
     if (!response.ok) return null;
 

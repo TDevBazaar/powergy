@@ -39,7 +39,9 @@ export async function generateMetadata({
   const hdrs = await headers();
   const origin = getRequestOrigin(hdrs);
 
-  const order = await fetchPreviewOrderData(cleanRef, rawD);
+  const order = await fetchPreviewOrderData(cleanRef, rawD, {
+    preferSnapshot: true,
+  });
   const title = `Pedido #${order.reference} · NOVA MODA`;
 
   const description =
@@ -74,8 +76,8 @@ export async function generateMetadata({
       images: [
         {
           url: ogImageUrl,
-          width: 1200,
-          height: 630,
+          width: 800,
+          height: 420,
           type: "image/png",
           alt: `Fotos del pedido #${order.reference} en NOVA MODA`,
         },
@@ -108,7 +110,9 @@ export default async function OrderPreviewPage({
         : "";
 
   const cleanRef = safeDecodeParam(ref);
-  const order = await fetchPreviewOrderData(cleanRef, rawD);
+  const order = await fetchPreviewOrderData(cleanRef, rawD, {
+    preferSnapshot: true,
+  });
 
   return <OrderPreviewClient order={order} />;
 }

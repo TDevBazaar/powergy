@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   ClipboardList,
   MessageCircle,
@@ -32,7 +32,10 @@ import {
   apiSend,
   type ApiOrder,
 } from "@/lib/powergy-api";
-import { buildOrderPreviewPath } from "@/lib/order-preview";
+import {
+  buildOrderPreviewImagePath,
+  buildOrderPreviewPath,
+} from "@/lib/order-preview";
 import { whatsappUrl } from "@/lib/whatsapp";
 import type { CartLine, Order } from "@/lib/types";
 
@@ -87,16 +90,32 @@ export function CheckoutView() {
   const shippingCost = shippingCostFor(subtotal, "estandar");
   const total = subtotal + shippingCost;
 
-  // Redirigir automáticamente a WhatsApp en cuanto se confirma el pedido
+  const previewItems = useMemo(
+    () =>
+      lines.map((l) => ({
+        productId: l.productId,
+        qty: l.qty,
+        name: l.product.name,
+        price: l.product.price,
+        image: l.product.images[0] || l.product.image,
+        categoryName: l.product.categoryName,
+        slug: l.product.slug,
+      })),
+    [lines]
+  );
+
+  const warmupPath =
+    previewItems.length > 0
+      ? buildOrderPreviewImagePath("warmup", previewItems)
+      : "";
+
+  // Pre-calienta la función Open Graph y la descarga de fotos mientras el cliente revisa el resumen
   useEffect(() => {
-    if (confirmed && whatsappLink) {
-      // Redirección directa para evitar bloqueos de ventanas emergentes (popups)
-      const timer = setTimeout(() => {
-        window.location.href = whatsappLink;
-      }, 400);
-      return () => clearTimeout(timer);
-    }
-  }, [confirmed, whatsappLink]);
+    if (confirmed || !warmupPath) return;
+    const controller = new AbortController();
+    void fetch(warmupPath, { signal: controller.signal }).catch(() => {});
+    return () => controller.abort();
+  }, [confirmed, warmupPath]);
 
   if (confirmed) {
     return (
@@ -212,15 +231,11 @@ export function CheckoutView() {
       const origin = typeof window !== "undefined" ? window.location.origin : "";
       const previewUrl = `${origin}${buildOrderPreviewPath(
         respuesta.reference,
-        lines.map((l) => ({
-          productId: l.productId,
-          qty: l.qty,
-          name: l.product.name,
-          price: l.product.price,
-          image: l.product.images[0] || l.product.image,
-          categoryName: l.product.categoryName,
-          slug: l.product.slug,
-        }))
+        previewItems
+      )}`;
+      const ogImageUrl = `${origin}${buildOrderPreviewImagePath(
+        respuesta.reference,
+        previewItems
       )}`;
       const adminUrl = `${origin}/admin?order=${encodeURIComponent(respuesta.reference)}`;
 
@@ -251,11 +266,17 @@ export function CheckoutView() {
       setConfirmed(order);
       window.scrollTo({ top: 0 });
 
-      // Intento inmediato de apertura (y si el navegador bloquea el pop-up, el useEffect redirige automáticamente)
+      // Pre-cachea en Vercel Edge la vista previa y su imagen PNG final antes de abrir WhatsApp
+      // para que la tarjeta con fotos aparezca prácticamente al instante (máx. 1.1 s).
+      await Promise.race([
+        Promise.allSettled([fetch(previewUrl), fetch(ogImageUrl)]),
+        new Promise<void>((resolve) => setTimeout(resolve, 1100)),
+      ]);
+
       try {
         window.location.href = urlWa;
       } catch {
-        /* Redirección respaldada por useEffect */
+        /* El usuario siempre dispone del botón manual "Continuar en WhatsApp" */
       }
     } catch (error) {
       setSendError(

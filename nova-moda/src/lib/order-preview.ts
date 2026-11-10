@@ -233,3 +233,13 @@ export function buildOrderPreviewPath(
   const token = encodeOrderPreviewToken(items);
   return token ? `${basePath}?d=${token}` : basePath;
 }
+
+/** Endpoint de la imagen Open Graph 800×420 del pedido (/api/order-preview/[ref]?d=...) */
+export function buildOrderPreviewImagePath(
+  reference: string,
+  items: ReadonlyArray<OrderPreviewItemInput>
+): string {
+  const basePath = `/api/order-preview/${encodeURIComponent(reference.trim() || "Pedido")}`;
+  const token = encodeOrderPreviewToken(items);
+  return token ? `${basePath}?d=${token}` : basePath;
+}

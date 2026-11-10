@@ -6,8 +6,8 @@ import {
   fetchSafeOgDataUri,
 } from "@/lib/order-preview-server";
 
-const WIDTH = 1200;
-const HEIGHT = 630;
+const WIDTH = 800;
+const HEIGHT = 420;
 
 interface PreviewTile {
   line: OrderPreviewLine;
@@ -29,9 +29,9 @@ function ProductImageBox({
   tile,
   width,
   height,
-  borderRadius = 18,
+  borderRadius = 14,
   qtyBadge,
-  badgeFontSize = 20,
+  badgeFontSize = 14,
 }: {
   tile: PreviewTile;
   width: number;
@@ -82,7 +82,7 @@ function ProductImageBox({
         >
           <span
             style={{
-              fontSize: Math.max(32, Math.round(width * 0.28)),
+              fontSize: Math.max(24, Math.round(width * 0.28)),
               fontWeight: 700,
               color: "#5C4633",
             }}
@@ -91,10 +91,10 @@ function ProductImageBox({
           </span>
           <span
             style={{
-              fontSize: 14,
+              fontSize: 10,
               fontWeight: 600,
               color: "#8F6A4B",
-              marginTop: 6,
+              marginTop: 4,
             }}
           >
             NOVA MODA
@@ -107,12 +107,12 @@ function ProductImageBox({
           style={{
             display: "flex",
             position: "absolute",
-            top: 10,
-            right: 10,
+            top: 7,
+            right: 7,
             backgroundColor: "#221C15",
             color: "#FBF6EE",
             borderRadius: 999,
-            padding: "4px 12px",
+            padding: "3px 9px",
             fontSize: badgeFontSize,
             fontWeight: 700,
             border: "2px solid #FFFDF9",
@@ -152,8 +152,8 @@ function renderCollageJsx(
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
-          height: 82,
-          padding: "22px 32px 0 32px",
+          height: 56,
+          padding: "14px 22px 0 22px",
         }}
       >
         <div style={{ display: "flex", alignItems: "center" }}>
@@ -162,25 +162,25 @@ function renderCollageJsx(
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              width: 44,
-              height: 44,
+              width: 30,
+              height: 30,
               borderRadius: 999,
               backgroundColor: "#221C15",
               color: "#FBF6EE",
-              fontSize: 22,
+              fontSize: 15,
               fontWeight: 700,
-              marginRight: 12,
+              marginRight: 8,
             }}
           >
             N
           </div>
           <span
             style={{
-              fontSize: 24,
+              fontSize: 16,
               fontWeight: 700,
-              letterSpacing: 3,
+              letterSpacing: 2,
               color: "#221C15",
-              marginRight: 16,
+              marginRight: 11,
             }}
           >
             NOVA MODA
@@ -191,8 +191,8 @@ function renderCollageJsx(
               alignItems: "center",
               backgroundColor: "#E9DCC6",
               borderRadius: 999,
-              padding: "6px 16px",
-              fontSize: 20,
+              padding: "4px 12px",
+              fontSize: 14,
               fontWeight: 700,
               color: "#221C15",
             }}
@@ -208,13 +208,13 @@ function renderCollageJsx(
                 display: "flex",
                 alignItems: "center",
                 backgroundColor: "#FFFDF9",
-                border: "2px solid #E6DCC9",
+                border: "1.5px solid #E6DCC9",
                 borderRadius: 999,
-                padding: "6px 16px",
-                fontSize: 20,
+                padding: "4px 12px",
+                fontSize: 14,
                 fontWeight: 600,
                 color: "#5C4633",
-                marginRight: 10,
+                marginRight: 8,
               }}
             >
               {`${order.totalQty} ${order.totalQty === 1 ? "artículo" : "artículos"}`}
@@ -226,8 +226,8 @@ function renderCollageJsx(
               alignItems: "center",
               backgroundColor: "#221C15",
               borderRadius: 999,
-              padding: "6px 18px",
-              fontSize: 22,
+              padding: "4px 14px",
+              fontSize: 15,
               fontWeight: 700,
               color: "#FBF6EE",
             }}
@@ -237,12 +237,12 @@ function renderCollageJsx(
         </div>
       </div>
 
-      {/* Área principal del collage */}
+      {/* Área principal del collage (756 × 330) */}
       <div
         style={{
           display: "flex",
           flex: 1,
-          padding: "20px 32px 26px 32px",
+          padding: "14px 22px 18px 22px",
           alignItems: "stretch",
           justifyContent: "center",
         }}
@@ -255,18 +255,18 @@ function renderCollageJsx(
               alignItems: "center",
               justifyContent: "center",
               width: "100%",
-              height: "100%",
-              borderRadius: 28,
+              height: 330,
+              borderRadius: 20,
               backgroundColor: "#FFFDF9",
-              border: "2px solid #E6DCC9",
-              padding: 40,
+              border: "1.5px solid #E6DCC9",
+              padding: 28,
             }}
           >
             <span
               style={{
-                fontSize: 20,
+                fontSize: 14,
                 fontWeight: 600,
-                letterSpacing: 4,
+                letterSpacing: 3,
                 color: "#8F6A4B",
               }}
             >
@@ -274,19 +274,19 @@ function renderCollageJsx(
             </span>
             <span
               style={{
-                fontSize: 48,
+                fontSize: 32,
                 fontWeight: 700,
                 color: "#221C15",
-                marginTop: 14,
+                marginTop: 10,
               }}
             >
               {`#${truncateText(order.reference, 26)}`}
             </span>
             <span
               style={{
-                fontSize: 24,
+                fontSize: 16,
                 color: "#786957",
-                marginTop: 14,
+                marginTop: 10,
               }}
             >
               Toca el enlace para ver los artículos del pedido.
@@ -300,29 +300,29 @@ function renderCollageJsx(
               display: "flex",
               flexDirection: "row",
               width: "100%",
-              height: 492,
-              borderRadius: 28,
+              height: 330,
+              borderRadius: 20,
               backgroundColor: "#FFFDF9",
-              border: "2px solid #E6DCC9",
-              padding: 20,
+              border: "1.5px solid #E6DCC9",
+              padding: 14,
               alignItems: "center",
             }}
           >
             <ProductImageBox
               tile={tiles[0]}
-              width={360}
-              height={452}
-              borderRadius={22}
+              width={240}
+              height={302}
+              borderRadius={15}
               qtyBadge={tiles[0].line.qty}
-              badgeFontSize={26}
+              badgeFontSize={18}
             />
             <div
               style={{
                 display: "flex",
                 flexDirection: "column",
                 flex: 1,
-                paddingLeft: 36,
-                paddingRight: 16,
+                paddingLeft: 24,
+                paddingRight: 10,
                 justifyContent: "center",
               }}
             >
@@ -333,8 +333,8 @@ function renderCollageJsx(
                   backgroundColor: "#EFE6D6",
                   color: "#8F6A4B",
                   borderRadius: 999,
-                  padding: "6px 18px",
-                  fontSize: 20,
+                  padding: "4px 12px",
+                  fontSize: 14,
                   fontWeight: 600,
                 }}
               >
@@ -342,11 +342,11 @@ function renderCollageJsx(
               </div>
               <span
                 style={{
-                  fontSize: 40,
+                  fontSize: 27,
                   fontWeight: 700,
                   lineHeight: 1.2,
                   color: "#221C15",
-                  marginTop: 20,
+                  marginTop: 14,
                 }}
               >
                 {truncateText(tiles[0].line.name, 70)}
@@ -356,7 +356,7 @@ function renderCollageJsx(
                   display: "flex",
                   flexDirection: "row",
                   alignItems: "center",
-                  marginTop: 30,
+                  marginTop: 20,
                 }}
               >
                 <div
@@ -364,18 +364,18 @@ function renderCollageJsx(
                     display: "flex",
                     backgroundColor: "#221C15",
                     color: "#FBF6EE",
-                    borderRadius: 16,
-                    padding: "10px 22px",
-                    fontSize: 26,
+                    borderRadius: 12,
+                    padding: "7px 15px",
+                    fontSize: 18,
                     fontWeight: 700,
-                    marginRight: 18,
+                    marginRight: 14,
                   }}
                 >
                   {`Cantidad: ×${tiles[0].line.qty}`}
                 </div>
                 <span
                   style={{
-                    fontSize: 42,
+                    fontSize: 28,
                     fontWeight: 700,
                     color: "#221C15",
                   }}
@@ -393,7 +393,7 @@ function renderCollageJsx(
               display: "flex",
               flexDirection: "row",
               width: "100%",
-              height: 492,
+              height: 330,
               justifyContent: "space-between",
             }}
           >
@@ -403,29 +403,29 @@ function renderCollageJsx(
                 style={{
                   display: "flex",
                   flexDirection: "row",
-                  width: 556,
-                  height: 492,
-                  borderRadius: 26,
+                  width: 370,
+                  height: 330,
+                  borderRadius: 18,
                   backgroundColor: "#FFFDF9",
-                  border: "2px solid #E6DCC9",
-                  padding: 16,
+                  border: "1.5px solid #E6DCC9",
+                  padding: 12,
                   alignItems: "center",
                 }}
               >
                 <ProductImageBox
                   tile={tile}
-                  width={270}
-                  height={460}
-                  borderRadius={20}
+                  width={180}
+                  height={306}
+                  borderRadius={14}
                   qtyBadge={tile.line.qty}
-                  badgeFontSize={22}
+                  badgeFontSize={16}
                 />
                 <div
                   style={{
                     display: "flex",
                     flexDirection: "column",
                     flex: 1,
-                    paddingLeft: 20,
+                    paddingLeft: 14,
                     justifyContent: "center",
                   }}
                 >
@@ -436,8 +436,8 @@ function renderCollageJsx(
                       backgroundColor: "#EFE6D6",
                       color: "#8F6A4B",
                       borderRadius: 999,
-                      padding: "4px 12px",
-                      fontSize: 16,
+                      padding: "3px 9px",
+                      fontSize: 12,
                       fontWeight: 600,
                     }}
                   >
@@ -445,21 +445,21 @@ function renderCollageJsx(
                   </div>
                   <span
                     style={{
-                      fontSize: 27,
+                      fontSize: 18,
                       fontWeight: 700,
                       lineHeight: 1.25,
                       color: "#221C15",
-                      marginTop: 14,
+                      marginTop: 10,
                     }}
                   >
-                    {truncateText(tile.line.name, 54)}
+                    {truncateText(tile.line.name, 52)}
                   </span>
                   <span
                     style={{
-                      fontSize: 32,
+                      fontSize: 22,
                       fontWeight: 700,
                       color: "#221C15",
-                      marginTop: 22,
+                      marginTop: 14,
                     }}
                   >
                     {formatPriceLabel(tile.line.lineTotal)}
@@ -467,9 +467,9 @@ function renderCollageJsx(
                   {tile.line.qty > 1 && tile.line.unitPrice > 0 && (
                     <span
                       style={{
-                        fontSize: 17,
+                        fontSize: 12,
                         color: "#786957",
-                        marginTop: 6,
+                        marginTop: 4,
                       }}
                     >
                       {`${formatPrice(tile.line.unitPrice)} c/u`}
@@ -487,7 +487,7 @@ function renderCollageJsx(
               display: "flex",
               flexDirection: "row",
               width: "100%",
-              height: 492,
+              height: 330,
               justifyContent: "space-between",
             }}
           >
@@ -497,21 +497,21 @@ function renderCollageJsx(
                 style={{
                   display: "flex",
                   flexDirection: "column",
-                  width: 364,
-                  height: 492,
-                  borderRadius: 24,
+                  width: 242,
+                  height: 330,
+                  borderRadius: 18,
                   backgroundColor: "#FFFDF9",
-                  border: "2px solid #E6DCC9",
-                  padding: 14,
+                  border: "1.5px solid #E6DCC9",
+                  padding: 10,
                 }}
               >
                 <ProductImageBox
                   tile={tile}
-                  width={336}
-                  height={338}
-                  borderRadius={18}
+                  width={222}
+                  height={226}
+                  borderRadius={12}
                   qtyBadge={tile.line.qty}
-                  badgeFontSize={21}
+                  badgeFontSize={15}
                 />
                 <div
                   style={{
@@ -519,14 +519,14 @@ function renderCollageJsx(
                     flexDirection: "column",
                     flex: 1,
                     justifyContent: "space-between",
-                    paddingTop: 12,
-                    paddingLeft: 4,
-                    paddingRight: 4,
+                    paddingTop: 8,
+                    paddingLeft: 3,
+                    paddingRight: 3,
                   }}
                 >
                   <span
                     style={{
-                      fontSize: 21,
+                      fontSize: 14,
                       fontWeight: 700,
                       lineHeight: 1.2,
                       color: "#221C15",
@@ -541,12 +541,12 @@ function renderCollageJsx(
                       alignItems: "center",
                     }}
                   >
-                    <span style={{ fontSize: 16, color: "#786957" }}>
+                    <span style={{ fontSize: 11, color: "#786957" }}>
                       {truncateText(tile.line.categoryName, 16)}
                     </span>
                     <span
                       style={{
-                        fontSize: 24,
+                        fontSize: 16,
                         fontWeight: 700,
                         color: "#221C15",
                       }}
@@ -566,7 +566,7 @@ function renderCollageJsx(
               display: "flex",
               flexDirection: "row",
               width: "100%",
-              height: 492,
+              height: 330,
               justifyContent: "space-between",
             }}
           >
@@ -576,21 +576,21 @@ function renderCollageJsx(
                 style={{
                   display: "flex",
                   flexDirection: "column",
-                  width: 268,
-                  height: 492,
-                  borderRadius: 24,
+                  width: 178,
+                  height: 330,
+                  borderRadius: 16,
                   backgroundColor: "#FFFDF9",
-                  border: "2px solid #E6DCC9",
-                  padding: 12,
+                  border: "1.5px solid #E6DCC9",
+                  padding: 8,
                 }}
               >
                 <ProductImageBox
                   tile={tile}
-                  width={244}
-                  height={332}
-                  borderRadius={16}
+                  width={162}
+                  height={222}
+                  borderRadius={12}
                   qtyBadge={tile.line.qty}
-                  badgeFontSize={20}
+                  badgeFontSize={14}
                 />
                 <div
                   style={{
@@ -598,14 +598,14 @@ function renderCollageJsx(
                     flexDirection: "column",
                     flex: 1,
                     justifyContent: "space-between",
-                    paddingTop: 12,
-                    paddingLeft: 4,
-                    paddingRight: 4,
+                    paddingTop: 8,
+                    paddingLeft: 3,
+                    paddingRight: 3,
                   }}
                 >
                   <span
                     style={{
-                      fontSize: 19,
+                      fontSize: 13,
                       fontWeight: 700,
                       lineHeight: 1.2,
                       color: "#221C15",
@@ -615,7 +615,7 @@ function renderCollageJsx(
                   </span>
                   <span
                     style={{
-                      fontSize: 23,
+                      fontSize: 16,
                       fontWeight: 700,
                       color: "#221C15",
                     }}
@@ -635,7 +635,7 @@ function renderCollageJsx(
               flexDirection: "row",
               flexWrap: "wrap",
               width: "100%",
-              height: 492,
+              height: 330,
               justifyContent: "space-between",
               alignContent: "space-between",
             }}
@@ -646,22 +646,22 @@ function renderCollageJsx(
                 style={{
                   display: "flex",
                   flexDirection: "row",
-                  width: 366,
-                  height: 236,
-                  borderRadius: 22,
+                  width: 244,
+                  height: 158,
+                  borderRadius: 16,
                   backgroundColor: "#FFFDF9",
-                  border: "2px solid #E6DCC9",
-                  padding: 12,
+                  border: "1.5px solid #E6DCC9",
+                  padding: 8,
                   alignItems: "center",
                 }}
               >
                 <ProductImageBox
                   tile={tile}
-                  width={158}
-                  height={212}
-                  borderRadius={16}
+                  width={106}
+                  height={142}
+                  borderRadius={12}
                   qtyBadge={tile.line.qty}
-                  badgeFontSize={18}
+                  badgeFontSize={13}
                 />
                 <div
                   style={{
@@ -669,16 +669,16 @@ function renderCollageJsx(
                     flexDirection: "column",
                     flex: 1,
                     height: "100%",
-                    paddingLeft: 14,
-                    paddingTop: 4,
-                    paddingBottom: 4,
+                    paddingLeft: 10,
+                    paddingTop: 2,
+                    paddingBottom: 2,
                     justifyContent: "space-between",
                   }}
                 >
                   <div style={{ display: "flex", flexDirection: "column" }}>
                     <span
                       style={{
-                        fontSize: 14,
+                        fontSize: 10,
                         fontWeight: 600,
                         color: "#8F6A4B",
                       }}
@@ -687,19 +687,19 @@ function renderCollageJsx(
                     </span>
                     <span
                       style={{
-                        fontSize: 19,
+                        fontSize: 13,
                         fontWeight: 700,
                         lineHeight: 1.22,
                         color: "#221C15",
-                        marginTop: 6,
+                        marginTop: 4,
                       }}
                     >
-                      {truncateText(tile.line.name, 42)}
+                      {truncateText(tile.line.name, 40)}
                     </span>
                   </div>
                   <span
                     style={{
-                      fontSize: 22,
+                      fontSize: 15,
                       fontWeight: 700,
                       color: "#221C15",
                     }}
@@ -715,18 +715,18 @@ function renderCollageJsx(
                 style={{
                   display: "flex",
                   flexDirection: "column",
-                  width: 366,
-                  height: 236,
-                  borderRadius: 22,
+                  width: 244,
+                  height: 158,
+                  borderRadius: 16,
                   backgroundColor: "#221C15",
                   color: "#FBF6EE",
-                  padding: 20,
+                  padding: 14,
                   justifyContent: "center",
                 }}
               >
                 <span
                   style={{
-                    fontSize: 38,
+                    fontSize: 26,
                     fontWeight: 700,
                     color: "#F0E6D6",
                   }}
@@ -735,10 +735,10 @@ function renderCollageJsx(
                 </span>
                 <span
                   style={{
-                    fontSize: 17,
+                    fontSize: 12,
                     lineHeight: 1.35,
                     color: "#D9BFA7",
-                    marginTop: 10,
+                    marginTop: 6,
                   }}
                 >
                   {truncateText(
@@ -746,15 +746,15 @@ function renderCollageJsx(
                       .slice(0, 3)
                       .map((l) => `${l.qty}× ${l.name}`)
                       .join(" · "),
-                    76
+                    70
                   )}
                 </span>
                 <span
                   style={{
-                    fontSize: 15,
+                    fontSize: 11,
                     fontWeight: 600,
                     color: "#B08968",
-                    marginTop: 14,
+                    marginTop: 10,
                   }}
                 >
                   Toca para ver todo el pedido →
@@ -767,20 +767,20 @@ function renderCollageJsx(
                 style={{
                   display: "flex",
                   flexDirection: "column",
-                  width: 366,
-                  height: 236,
-                  borderRadius: 22,
+                  width: 244,
+                  height: 158,
+                  borderRadius: 16,
                   backgroundColor: "#EFE6D6",
-                  border: "2px solid #E6DCC9",
-                  padding: 22,
+                  border: "1.5px solid #E6DCC9",
+                  padding: 15,
                   justifyContent: "center",
                 }}
               >
                 <span
                   style={{
-                    fontSize: 15,
+                    fontSize: 10,
                     fontWeight: 700,
-                    letterSpacing: 2,
+                    letterSpacing: 1.5,
                     color: "#8F6A4B",
                   }}
                 >
@@ -788,20 +788,20 @@ function renderCollageJsx(
                 </span>
                 <span
                   style={{
-                    fontSize: 28,
+                    fontSize: 19,
                     fontWeight: 700,
                     color: "#221C15",
-                    marginTop: 8,
+                    marginTop: 6,
                   }}
                 >
                   {`${order.totalQty} artículos`}
                 </span>
                 <span
                   style={{
-                    fontSize: 20,
+                    fontSize: 14,
                     fontWeight: 600,
                     color: "#5C4633",
-                    marginTop: 6,
+                    marginTop: 4,
                   }}
                 >
                   {`Total: ${headerSubtotal}`}
@@ -815,12 +815,14 @@ function renderCollageJsx(
   );
 }
 
-/** Genera la imagen PNG 1200×630 para WhatsApp Open Graph con respaldo automático */
+/** Genera la imagen PNG 800×420 para WhatsApp Open Graph con respaldo automático */
 export async function renderOrderPreviewResponse(
   ref: string,
   token: string
 ): Promise<Response> {
-  const order = await fetchPreviewOrderData(ref, token);
+  const order = await fetchPreviewOrderData(ref, token, {
+    preferSnapshot: true,
+  });
 
   const hasOverflow = order.lines.length > 6;
   const visibleLines = hasOverflow
@@ -866,4 +868,3 @@ export async function renderOrderPreviewResponse(
     return new Response(pngBytes, { status: 200, headers });
   }
 }
-
