@@ -73,6 +73,18 @@ public sealed record CustomerOrderQueryRequest
     public string? Store { get; init; }
 
     public string? Status { get; init; }
+
+    /// <summary>Búsqueda opcional por referencia, producto o vendedor.</summary>
+    [StringLength(120)]
+    public string? Q { get; init; }
+
+    /// <summary>Filtro de origen: "any" (con enlace), "none" (directa) o código (?v=).</summary>
+    [StringLength(40)]
+    public string? Referral { get; init; }
+
+    /// <summary>Filtra solicitudes con o sin productos pendientes de precio.</summary>
+    public bool? HasUnpriced { get; init; }
+
     public DateTimeOffset? From { get; init; }
     public DateTimeOffset? To { get; init; }
 

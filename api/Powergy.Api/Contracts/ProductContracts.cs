@@ -72,6 +72,12 @@ public sealed record ProductQueryRequest
 
     /// <summary>Whether inactive products are included in the admin list.</summary>
     public bool IncludeInactive { get; init; } = true;
+
+    /// <summary>Optional visibility filter for the admin list: true = visible only, false = hidden only.</summary>
+    public bool? IsActive { get; init; }
+
+    /// <summary>Optional price availability filter: true = priced (&gt; 0), false = unpriced.</summary>
+    public bool? HasPrice { get; init; }
 }
 
 /// <summary>Parameters used for cursor-based infinite scroll through catalog products.</summary>

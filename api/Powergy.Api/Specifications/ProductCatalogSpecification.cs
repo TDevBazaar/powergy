@@ -14,6 +14,8 @@ public sealed class ProductCatalogSpecification : Specification<Product>
             request.Featured,
             request.MaxPrice,
             request.IncludeInactive,
+            admin ? request.IsActive : null,
+            request.HasPrice,
             admin,
             store)
     {
@@ -27,6 +29,8 @@ public sealed class ProductCatalogSpecification : Specification<Product>
             request.Featured,
             request.MaxPrice,
             includeInactive: false,
+            isActive: null,
+            hasPrice: null,
             admin: false,
             store)
     {
@@ -39,6 +43,8 @@ public sealed class ProductCatalogSpecification : Specification<Product>
         bool? featured,
         decimal? maxPrice,
         bool includeInactive,
+        bool? isActive,
+        bool? hasPrice,
         bool admin,
         string store)
     {
@@ -52,11 +58,17 @@ public sealed class ProductCatalogSpecification : Specification<Product>
         Criteria = product =>
             product.Store == store
             && (admin
-                ? includeInactive || product.IsActive
+                ? (isActive.HasValue
+                    ? product.IsActive == isActive.Value
+                    : (includeInactive || product.IsActive))
                 : product.IsActive && product.Category.IsActive)
             && (!hasCategories || categorySlugs.Contains(product.Category.Slug))
             && (!onSale.HasValue || product.OnSale == onSale.Value)
             && (!featured.HasValue || product.TopRank.HasValue == featured.Value)
+            && (!hasPrice.HasValue
+                || (hasPrice.Value
+                    ? (product.PriceUsd.HasValue && product.PriceUsd.Value > 0)
+                    : (!product.PriceUsd.HasValue || product.PriceUsd.Value <= 0)))
             && (!hasMaxPrice
                 || (product.PriceUsd.HasValue
                     && product.PriceUsd.Value > 0
@@ -68,7 +80,7 @@ public sealed class ProductCatalogSpecification : Specification<Product>
         var list = new List<string>();
         if (!string.IsNullOrWhiteSpace(category))
         {
-            list.Add(category.Trim());
+            list.Add(category.Trim().ToLowerInvariant());
         }
 
         if (!string.IsNullOrWhiteSpace(categories))
@@ -77,7 +89,7 @@ public sealed class ProductCatalogSpecification : Specification<Product>
             {
                 if (part.Length > 0)
                 {
-                    list.Add(part);
+                    list.Add(part.ToLowerInvariant());
                 }
             }
         }

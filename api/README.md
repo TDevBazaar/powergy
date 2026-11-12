@@ -129,12 +129,12 @@ Product POST requests accept an optional `id`; this allows importing the existin
 - `GET /api/categories` — active categories.
 - `GET /api/products` — active catalog, paginated; supports `category`, `q`, `onSale`, `featured`, `store`, `page` and `pageSize`.
 - `GET /api/products/{slug}` — active product; supports `store`.
-- `GET /api/categories/admin` and `GET /api/products/admin` — admin catalog views.
+- `GET /api/categories/admin` and `GET /api/products/admin` — admin catalog views (`products/admin` supports `q`, `category`, `isActive`, `hasPrice`, `onSale`, `featured`, `sort`, `includeInactive`, `store`, `page`, `pageSize`).
 - `POST`, `PUT` and `DELETE` under `/api/categories` and `/api/products` — admin-only category/product management. DELETE deactivates rather than permanently removing records.
 - `GET /api/sellers/{code}` — public lookup resolving an active administrator's referral link code (`?v=<code>`) to their display name and WhatsApp phone number (`Cache-Control: no-store`).
 - `POST /api/orders` — records an idempotent WhatsApp order request for the catalog cart (accepts optional `referralCode` to attribute the order).
 - `GET /api/admin/profile` and `PUT /api/admin/profile` — lets each signed-in administrator configure their own display name, shareable referral code (`?v=<code>`) and WhatsApp phone number.
-- `GET /api/admin/orders`, `GET /api/admin/orders/metrics`, `GET /api/admin/orders/{id}` and `POST /api/admin/orders/{id}/close` — admin-only listing, statistics, detail and closure of order requests. Closing accepts `closed` (sale) or `cancelled` (with `cancellationReason` and optional `cancellationNote`), plus the final `items` array where the administrator can adjust quantities, set the final unit price and remove products. Closing an already closed request is idempotent and returns the stored state.
+- `GET /api/admin/orders`, `GET /api/admin/orders/metrics`, `GET /api/admin/orders/{id}` and `POST /api/admin/orders/{id}/close` — admin-only listing, statistics, detail and closure of order requests (`admin/orders` supports `status`, `q`, `referral`, `hasUnpriced`, `from`, `to`, `store`, `page`, `pageSize`). Closing accepts `closed` (sale) or `cancelled` (with `cancellationReason` and optional `cancellationNote`), plus the final `items` array where the administrator can adjust quantities, set the final unit price and remove products. Closing an already closed request is idempotent and returns the stored state.
 - `GET /api/admin/audit` — admin-only audit trail paged by `entityType`, `entityId`, `page` and `pageSize`.
 - `GET /health` — API/database connectivity check.
 

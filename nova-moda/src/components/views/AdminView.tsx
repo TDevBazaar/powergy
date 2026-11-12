@@ -9,12 +9,14 @@ import {
   CheckCircle2,
   Copy,
   Eye,
+  EyeOff,
   Link2,
   Loader2,
   Pencil,
   Plus,
   Search,
   ShieldCheck,
+  SlidersHorizontal,
   Trash2,
   TriangleAlert,
   X,
@@ -75,6 +77,8 @@ import {
   updateProduct,
   type AdminOrder,
   type AdminOrderListItem,
+  type AdminProductSort,
+  type AdminProductVisibility,
   type AdminSellerProfile,
   type OrderMetrics,
 } from "@/lib/admin-api";
@@ -222,11 +226,26 @@ export function AdminView() {
   const [orders, setOrders] = useState<AdminOrderListItem[]>([]);
   const [ordersPage, setOrdersPage] = useState(1);
   const [ordersTotalItems, setOrdersTotalItems] = useState(0);
+  const [ordersUnfilteredTotal, setOrdersUnfilteredTotal] = useState<number | null>(
+    null
+  );
   const [ordersTotalPages, setOrdersTotalPages] = useState(1);
   const [metrics, setMetrics] = useState<OrderMetrics | null>(null);
   const [cargandoPedidos, setCargandoPedidos] = useState(false);
   const [dateFilter, setDateFilter] = useState<OrderDateFilterState>(
     DEFAULT_ORDER_DATE_FILTER
+  );
+  const [orderQuery, setOrderQuery] = useState("");
+  const [debouncedOrderQuery, setDebouncedOrderQuery] = useState("");
+  const [orderStatus, setOrderStatus] = useState<
+    "all" | "requested" | "closed" | "cancelled"
+  >("all");
+  const [orderReferral, setOrderReferral] = useState("all");
+  const [orderPriceFilter, setOrderPriceFilter] = useState<
+    "all" | "unpriced" | "priced"
+  >("all");
+  const [knownReferrals, setKnownReferrals] = useState<Record<string, string>>(
+    {}
   );
 
   const [panelError, setPanelError] = useState("");
@@ -243,9 +262,23 @@ export function AdminView() {
     whatsAppPhone: "",
   });
 
-  /* ── Búsqueda y formularios ─────────────────────────────────── */
+  /* ── Búsqueda, filtros y formularios ────────────────────────── */
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [productVisibility, setProductVisibility] =
+    useState<AdminProductVisibility>("all");
+  const [productCategory, setProductCategory] = useState("all");
+  const [productPriceFilter, setProductPriceFilter] = useState<
+    "all" | "priced" | "unpriced"
+  >("all");
+  const [productTagFilter, setProductTagFilter] = useState<
+    "all" | "onSale" | "featured"
+  >("all");
+  const [productSort, setProductSort] =
+    useState<AdminProductSort>("destacados");
+  const [categoryQuery, setCategoryQuery] = useState("");
+  const [categoryVisibility, setCategoryVisibility] =
+    useState<AdminProductVisibility>("all");
   const [modalProducto, setModalProducto] = useState(false);
   const [formProducto, setFormProducto] = useState<ProductForm>(emptyProduct);
   const [subiendoImagen, setSubiendoImagen] = useState(false);
@@ -342,9 +375,28 @@ export function AdminView() {
     setToken("");
     setSesionEmail("");
     setProducts([]);
+    setTotalCatalogProducts(null);
+    setActiveProductsCount(null);
     setCategories([]);
     setOrders([]);
     setMetrics(null);
+    setOrdersUnfilteredTotal(null);
+    setKnownReferrals({});
+    setQuery("");
+    setDebouncedQuery("");
+    setProductVisibility("all");
+    setProductCategory("all");
+    setProductPriceFilter("all");
+    setProductTagFilter("all");
+    setProductSort("destacados");
+    setCategoryQuery("");
+    setCategoryVisibility("all");
+    setOrderQuery("");
+    setDebouncedOrderQuery("");
+    setOrderStatus("all");
+    setOrderReferral("all");
+    setOrderPriceFilter("all");
+    setDateFilter(DEFAULT_ORDER_DATE_FILTER);
     setSellerProfile(null);
     setSellerEndpointAvailable(true);
     setPerfilError("");
@@ -356,7 +408,26 @@ export function AdminView() {
     if (withCatalogSync) reloadCatalog();
   }, []);
 
-  /* ── Búsqueda con debounce ──────────────────────────────────── */
+  const hasProductCountFilter = Boolean(
+    debouncedQuery ||
+      productVisibility !== "all" ||
+      productCategory !== "all" ||
+      productPriceFilter !== "all" ||
+      productTagFilter !== "all"
+  );
+  const hasProductCountFilterRef = useRef(hasProductCountFilter);
+  useEffect(() => {
+    hasProductCountFilterRef.current = hasProductCountFilter;
+  }, [hasProductCountFilter]);
+
+  const hasOrderListFilter = Boolean(
+    debouncedOrderQuery ||
+      orderStatus !== "all" ||
+      orderReferral !== "all" ||
+      orderPriceFilter !== "all"
+  );
+
+  /* ── Búsqueda con debounce (productos y solicitudes) ─────────── */
   useEffect(() => {
     const clean = query.trim();
     if (clean === debouncedQuery) return;
@@ -366,6 +437,16 @@ export function AdminView() {
     }, 280);
     return () => window.clearTimeout(timer);
   }, [query, debouncedQuery]);
+
+  useEffect(() => {
+    const clean = orderQuery.trim();
+    if (clean === debouncedOrderQuery) return;
+    const timer = window.setTimeout(() => {
+      setDebouncedOrderQuery(clean);
+      setOrdersPage(1);
+    }, 280);
+    return () => window.clearTimeout(timer);
+  }, [orderQuery, debouncedOrderQuery]);
 
   /* ── Carga de categorías y resumen de catálogo ──────────────── */
   useEffect(() => {
@@ -381,7 +462,7 @@ export function AdminView() {
     ] = [
       fetchAdminCategories(token),
       fetchCatalogMeta(controller.signal),
-      debouncedQuery
+      hasProductCountFilterRef.current
         ? fetchAdminProducts(token, {
             term: "",
             page: 1,
@@ -412,7 +493,7 @@ export function AdminView() {
       activo = false;
       controller.abort();
     };
-  }, [token, refreshTick, debouncedQuery]);
+  }, [token, refreshTick]);
 
   /* ── Carga paginada de productos ────────────────────────────── */
   useEffect(() => {
@@ -424,6 +505,17 @@ export function AdminView() {
 
     fetchAdminProducts(token, {
       term: debouncedQuery,
+      category: productCategory === "all" ? undefined : productCategory,
+      visibility: productVisibility,
+      hasPrice:
+        productPriceFilter === "priced"
+          ? true
+          : productPriceFilter === "unpriced"
+            ? false
+            : undefined,
+      onSale: productTagFilter === "onSale" ? true : undefined,
+      featured: productTagFilter === "featured" ? true : undefined,
+      sort: productSort,
       page: productsPage,
       pageSize: ADMIN_PAGE_SIZE,
       signal: controller.signal,
@@ -438,7 +530,7 @@ export function AdminView() {
         setProducts(res.items);
         setProductsTotalItems(res.totalItems);
         setProductsTotalPages(safeTotalPages);
-        if (!debouncedQuery) {
+        if (!hasProductCountFilter) {
           setTotalCatalogProducts(res.totalItems);
         }
         const imageEntries: Record<string, string> = {};
@@ -461,9 +553,53 @@ export function AdminView() {
       activo = false;
       controller.abort();
     };
-  }, [token, debouncedQuery, productsPage, refreshTick, mergeProductImages]);
+  }, [
+    token,
+    debouncedQuery,
+    productCategory,
+    productVisibility,
+    productPriceFilter,
+    productTagFilter,
+    productSort,
+    hasProductCountFilter,
+    productsPage,
+    refreshTick,
+    mergeProductImages,
+  ]);
 
-  /* ── Carga paginada de solicitudes y estadísticas por fecha ─── */
+  /* ── Estadísticas KPI de solicitudes por fecha ──────────────── */
+  useEffect(() => {
+    if (!token || resolvedDates.validationError) return;
+    let activo = true;
+    const controller = new AbortController();
+
+    fetchOrderMetrics(token, {
+      from: resolvedDates.metricsFrom,
+      to: resolvedDates.metricsTo,
+      signal: controller.signal,
+    })
+      .then((metricsRes) => {
+        if (!activo) return;
+        setMetrics(metricsRes);
+      })
+      .catch((error) => {
+        if (!activo || isAbortError(error)) return;
+        setPanelError(mensajeError(error));
+      });
+
+    return () => {
+      activo = false;
+      controller.abort();
+    };
+  }, [
+    token,
+    refreshTick,
+    resolvedDates.metricsFrom,
+    resolvedDates.metricsTo,
+    resolvedDates.validationError,
+  ]);
+
+  /* ── Carga paginada de solicitudes ──────────────────────────── */
   useEffect(() => {
     if (!token || resolvedDates.validationError) return;
     let activo = true;
@@ -471,21 +607,23 @@ export function AdminView() {
     setCargandoPedidos(true);
     setPanelError("");
 
-    Promise.all([
-      fetchAdminOrders(token, {
-        from: resolvedDates.ordersFrom,
-        to: resolvedDates.ordersTo,
-        page: ordersPage,
-        pageSize: ADMIN_PAGE_SIZE,
-        signal: controller.signal,
-      }),
-      fetchOrderMetrics(token, {
-        from: resolvedDates.metricsFrom,
-        to: resolvedDates.metricsTo,
-        signal: controller.signal,
-      }),
-    ])
-      .then(([ordersRes, metricsRes]) => {
+    fetchAdminOrders(token, {
+      status: orderStatus === "all" ? undefined : orderStatus,
+      q: debouncedOrderQuery || undefined,
+      referral: orderReferral === "all" ? undefined : orderReferral,
+      hasUnpriced:
+        orderPriceFilter === "unpriced"
+          ? true
+          : orderPriceFilter === "priced"
+            ? false
+            : undefined,
+      from: resolvedDates.ordersFrom,
+      to: resolvedDates.ordersTo,
+      page: ordersPage,
+      pageSize: ADMIN_PAGE_SIZE,
+      signal: controller.signal,
+    })
+      .then((ordersRes) => {
         if (!activo) return;
         const safeTotalPages = Math.max(1, ordersRes.totalPages);
         if (ordersPage > safeTotalPages) {
@@ -495,7 +633,22 @@ export function AdminView() {
         setOrders(ordersRes.items);
         setOrdersTotalItems(ordersRes.totalItems);
         setOrdersTotalPages(safeTotalPages);
-        setMetrics(metricsRes);
+        if (!hasOrderListFilter) {
+          setOrdersUnfilteredTotal(ordersRes.totalItems);
+        }
+        setKnownReferrals((prev) => {
+          let next: Record<string, string> | null = null;
+          for (const item of ordersRes.items) {
+            if (!item.referralCode) continue;
+            const code = item.referralCode;
+            const label = item.referredByAdminName || code;
+            if (prev[code] !== label) {
+              if (!next) next = { ...prev };
+              next[code] = label;
+            }
+          }
+          return next ?? prev;
+        });
       })
       .catch((error) => {
         if (!activo || isAbortError(error)) return;
@@ -513,10 +666,13 @@ export function AdminView() {
     token,
     ordersPage,
     refreshTick,
+    orderStatus,
+    debouncedOrderQuery,
+    orderReferral,
+    orderPriceFilter,
+    hasOrderListFilter,
     resolvedDates.ordersFrom,
     resolvedDates.ordersTo,
-    resolvedDates.metricsFrom,
-    resolvedDates.metricsTo,
     resolvedDates.validationError,
   ]);
 
@@ -815,22 +971,84 @@ export function AdminView() {
     });
   };
 
-  const limpiarFiltroFecha = () => {
-    setOrdersPage(1);
-    setDateFilter(DEFAULT_ORDER_DATE_FILTER);
-  };
-
   const limpiarBusquedaProducto = () => {
     setQuery("");
     setDebouncedQuery("");
     setProductsPage(1);
   };
 
+  const limpiarFiltrosProducto = () => {
+    setQuery("");
+    setDebouncedQuery("");
+    setProductVisibility("all");
+    setProductCategory("all");
+    setProductPriceFilter("all");
+    setProductTagFilter("all");
+    setProductSort("destacados");
+    setProductsPage(1);
+  };
+
+  const limpiarFiltrosCategoria = () => {
+    setCategoryQuery("");
+    setCategoryVisibility("all");
+  };
+
+  const limpiarFiltrosSolicitudes = () => {
+    setOrderQuery("");
+    setDebouncedOrderQuery("");
+    setOrderStatus("all");
+    setOrderReferral("all");
+    setOrderPriceFilter("all");
+    setDateFilter(DEFAULT_ORDER_DATE_FILTER);
+    setOrdersPage(1);
+  };
+
+  const hasProductResettableFilters =
+    Boolean(query.trim()) ||
+    hasProductCountFilter ||
+    productSort !== "destacados";
+
+  const hasCategoryFilters =
+    Boolean(categoryQuery.trim()) || categoryVisibility !== "all";
+
   /* ── Productos ──────────────────────────────────────────────── */
   const categoriasActivas = useMemo(
     () => categories.filter((c) => c.isActive),
     [categories]
   );
+
+  const categoriesActiveCount = categoriasActivas.length;
+  const categoriesHiddenCount = categories.length - categoriesActiveCount;
+
+  const filteredCategories = useMemo(() => {
+    const cleanQuery = categoryQuery.trim().toLowerCase();
+    return categories.filter((c) => {
+      if (categoryVisibility === "visible" && !c.isActive) return false;
+      if (categoryVisibility === "hidden" && c.isActive) return false;
+      if (!cleanQuery) return true;
+      return (
+        c.name.toLowerCase().includes(cleanQuery) ||
+        c.slug.toLowerCase().includes(cleanQuery)
+      );
+    });
+  }, [categories, categoryQuery, categoryVisibility]);
+
+  const referralFilterOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    const ownCode = normalizeReferralCode(sellerProfile?.referralCode);
+    if (ownCode) {
+      map.set(ownCode, sellerProfile?.displayName?.trim() || ownCode);
+    }
+    for (const [code, label] of Object.entries(knownReferrals)) {
+      const clean = normalizeReferralCode(code);
+      if (clean && !map.has(clean)) {
+        map.set(clean, label || clean);
+      }
+    }
+    return Array.from(map.entries())
+      .map(([code, label]) => ({ code, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, "es"));
+  }, [sellerProfile?.referralCode, sellerProfile?.displayName, knownReferrals]);
 
   const abrirNuevoProducto = () => {
     setFormProducto({
@@ -1308,6 +1526,15 @@ export function AdminView() {
   const activosDisplay =
     activeProductsCount ?? products.filter((p) => p.isActive).length;
   const filtroFechaActivo = dateFilter.preset !== "all";
+  const hasOrderAnyFilter =
+    filtroFechaActivo ||
+    Boolean(orderQuery.trim()) ||
+    orderStatus !== "all" ||
+    orderReferral !== "all" ||
+    orderPriceFilter !== "all";
+  const ordersTotalBadge = hasOrderListFilter
+    ? (metrics?.requests ?? ordersUnfilteredTotal ?? ordersTotalItems)
+    : ordersTotalItems;
 
   return (
     <div className="mx-auto max-w-6xl px-3.5 pb-16 pt-6 sm:px-6 sm:pt-8">
@@ -1475,7 +1702,7 @@ export function AdminView() {
             value="pedidos"
             className="w-full rounded-xl px-3 py-2 text-[12.5px] font-medium sm:w-auto sm:flex-initial sm:rounded-full sm:px-5 sm:py-1.5 sm:text-[13px]"
           >
-            Solicitudes ({ordersTotalItems})
+            Solicitudes ({ordersTotalBadge})
           </TabsTrigger>
           <TabsTrigger
             value="enlace"
@@ -1488,12 +1715,12 @@ export function AdminView() {
         {/* ── Productos ── */}
         <TabsContent value="productos" className="mt-5">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="relative w-full sm:max-w-sm">
+            <div className="relative w-full sm:max-w-md">
               <Search className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Buscar por nombre, marca o categoría…"
+                placeholder="Buscar por nombre, marca, categoría o slug…"
                 className="h-11 rounded-full border-input bg-card pr-10 pl-10"
               />
               {query && (
@@ -1517,20 +1744,163 @@ export function AdminView() {
             </Button>
           </div>
 
+          <div className="mb-4 rounded-[1.4rem] bg-card p-3.5 shadow-card sm:p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                <SlidersHorizontal className="h-3.5 w-3.5 text-camel-deep" />
+                Filtros del catálogo
+              </p>
+              <div className="flex items-center gap-2 text-[11.5px] text-muted-foreground">
+                {cargandoProductos && (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-camel-deep" />
+                )}
+                <span>
+                  {productsTotalItems}{" "}
+                  {productsTotalItems === 1 ? "producto" : "productos"}
+                </span>
+                {hasProductResettableFilters && (
+                  <button
+                    type="button"
+                    onClick={limpiarFiltrosProducto}
+                    className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-[11px] font-medium text-foreground transition hover:bg-secondary/80"
+                  >
+                    <X className="h-3 w-3" />
+                    Limpiar filtros
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="Visibilidad de productos">
+              {(
+                [
+                  { id: "all", label: "Todos", Icon: null },
+                  { id: "visible", label: "Visibles", Icon: Eye },
+                  { id: "hidden", label: "Ocultos", Icon: EyeOff },
+                ] as const
+              ).map(({ id, label, Icon }) => {
+                const active = productVisibility === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => {
+                      setProductVisibility(id);
+                      setProductsPage(1);
+                    }}
+                    className={cn(
+                      "inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-medium transition",
+                      active
+                        ? "bg-foreground text-background shadow-card"
+                        : "border border-input bg-background text-foreground hover:border-camel"
+                    )}
+                  >
+                    {Icon && <Icon className="h-3.5 w-3.5" />}
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="min-w-0">
+                <Select
+                  value={productCategory}
+                  onValueChange={(v) => {
+                    setProductCategory(v);
+                    setProductsPage(1);
+                  }}
+                >
+                  <SelectTrigger
+                    aria-label="Filtrar por categoría"
+                    className="w-full min-w-0 rounded-xl border-input bg-background text-xs data-[size=default]:h-10"
+                  >
+                    <SelectValue placeholder="Categoría" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas las categorías</SelectItem>
+                    {categories.map((c) => (
+                      <SelectItem key={c.id} value={c.slug}>
+                        {c.name}
+                        {c.isActive ? "" : " (oculta)"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="min-w-0">
+                <Select
+                  value={productPriceFilter}
+                  onValueChange={(v) => {
+                    setProductPriceFilter(v as "all" | "priced" | "unpriced");
+                    setProductsPage(1);
+                  }}
+                >
+                  <SelectTrigger
+                    aria-label="Filtrar por precio"
+                    className="w-full min-w-0 rounded-xl border-input bg-background text-xs data-[size=default]:h-10"
+                  >
+                    <SelectValue placeholder="Precio" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los precios</SelectItem>
+                    <SelectItem value="priced">Con precio definido</SelectItem>
+                    <SelectItem value="unpriced">Sin precio (consultar)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="min-w-0">
+                <Select
+                  value={productTagFilter}
+                  onValueChange={(v) => {
+                    setProductTagFilter(v as "all" | "onSale" | "featured");
+                    setProductsPage(1);
+                  }}
+                >
+                  <SelectTrigger
+                    aria-label="Filtrar por etiqueta"
+                    className="w-full min-w-0 rounded-xl border-input bg-background text-xs data-[size=default]:h-10"
+                  >
+                    <SelectValue placeholder="Etiqueta" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas las etiquetas</SelectItem>
+                    <SelectItem value="onSale">En oferta</SelectItem>
+                    <SelectItem value="featured">Populares</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="min-w-0">
+                <Select
+                  value={productSort}
+                  onValueChange={(v) => {
+                    setProductSort(v as AdminProductSort);
+                    setProductsPage(1);
+                  }}
+                >
+                  <SelectTrigger
+                    aria-label="Ordenar productos"
+                    className="w-full min-w-0 rounded-xl border-input bg-background text-xs data-[size=default]:h-10"
+                  >
+                    <SelectValue placeholder="Ordenar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="destacados">Orden: Destacados</SelectItem>
+                    <SelectItem value="nuevos">Orden: Más recientes</SelectItem>
+                    <SelectItem value="precio-asc">Precio: menor a mayor</SelectItem>
+                    <SelectItem value="precio-desc">Precio: mayor a menor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
           {categoriasActivas.length === 0 && (
             <p className="mb-4 rounded-2xl bg-secondary/70 p-3.5 text-[12.5px] text-muted-foreground">
               Crea primero una categoría activa para poder publicar productos.
-            </p>
-          )}
-
-          {debouncedQuery && (
-            <p className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
-              {cargandoProductos && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              <span>
-                {productsTotalItems}{" "}
-                {productsTotalItems === 1 ? "resultado" : "resultados"} para “
-                {debouncedQuery}”
-              </span>
             </p>
           )}
 
@@ -1563,6 +1933,20 @@ export function AdminView() {
                             <p className="truncate font-mono text-[11px] text-muted-foreground">
                               {p.slug}
                             </p>
+                            {(p.oferta || p.top_ventas || p.top_rank !== null) && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {p.oferta && (
+                                  <span className="rounded-full bg-camel/15 px-2 py-0.5 text-[10px] font-medium text-camel-deep">
+                                    Oferta
+                                  </span>
+                                )}
+                                {(p.top_ventas || p.top_rank !== null) && (
+                                  <span className="rounded-full bg-[#4E5B48]/15 px-2 py-0.5 text-[10px] font-medium text-[#4E5B48]">
+                                    Popular
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -1615,13 +1999,29 @@ export function AdminView() {
               </table>
             </div>
             {products.length === 0 && (
-              <p className="px-5 py-8 text-center text-sm text-muted-foreground">
-                {cargandoProductos
-                  ? "Cargando productos…"
-                  : debouncedQuery
-                    ? `Sin resultados para “${debouncedQuery}”.`
-                    : "Todavía no hay productos."}
-              </p>
+              <div className="px-5 py-8 text-center text-sm text-muted-foreground">
+                {cargandoProductos ? (
+                  <p>Cargando productos…</p>
+                ) : hasProductResettableFilters ? (
+                  <div className="space-y-3">
+                    <p>
+                      {debouncedQuery
+                        ? `Sin resultados para “${debouncedQuery}” con los filtros activos.`
+                        : "Ningún producto coincide con los filtros actuales."}
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={limpiarFiltrosProducto}
+                      className="h-9 rounded-full border-input bg-card px-4 text-xs"
+                    >
+                      Limpiar filtros
+                    </Button>
+                  </div>
+                ) : (
+                  <p>Todavía no hay productos.</p>
+                )}
+              </div>
             )}
           </div>
 
@@ -1660,6 +2060,20 @@ export function AdminView() {
                       {formatPriceLabel(p.price_usd ?? 0)}
                     </span>
                   </p>
+                  {(p.oferta || p.top_ventas || p.top_rank !== null) && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {p.oferta && (
+                        <span className="rounded-full bg-camel/15 px-2 py-0.5 text-[10px] font-medium text-camel-deep">
+                          Oferta
+                        </span>
+                      )}
+                      {(p.top_ventas || p.top_rank !== null) && (
+                        <span className="rounded-full bg-[#4E5B48]/15 px-2 py-0.5 text-[10px] font-medium text-[#4E5B48]">
+                          Popular
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <div className="mt-2.5 flex flex-wrap items-center gap-2">
                     <Button
                       variant="outline"
@@ -1698,13 +2112,29 @@ export function AdminView() {
               </div>
             ))}
             {products.length === 0 && (
-              <p className="rounded-[1.3rem] bg-card px-4 py-8 text-center text-sm text-muted-foreground shadow-card">
-                {cargandoProductos
-                  ? "Cargando productos…"
-                  : debouncedQuery
-                    ? `Sin resultados para “${debouncedQuery}”.`
-                    : "Todavía no hay productos."}
-              </p>
+              <div className="rounded-[1.3rem] bg-card px-4 py-8 text-center text-sm text-muted-foreground shadow-card">
+                {cargandoProductos ? (
+                  <p>Cargando productos…</p>
+                ) : hasProductResettableFilters ? (
+                  <div className="space-y-3">
+                    <p>
+                      {debouncedQuery
+                        ? `Sin resultados para “${debouncedQuery}” con los filtros activos.`
+                        : "Ningún producto coincide con los filtros actuales."}
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={limpiarFiltrosProducto}
+                      className="h-9 rounded-full border-input bg-card px-4 text-xs"
+                    >
+                      Limpiar filtros
+                    </Button>
+                  </div>
+                ) : (
+                  <p>Todavía no hay productos.</p>
+                )}
+              </div>
             )}
           </div>
 
@@ -1722,7 +2152,26 @@ export function AdminView() {
 
         {/* ── Categorías ── */}
         <TabsContent value="categorias" className="mt-5">
-          <div className="mb-4 flex justify-end">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative w-full sm:max-w-md">
+              <Search className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={categoryQuery}
+                onChange={(e) => setCategoryQuery(e.target.value)}
+                placeholder="Buscar categoría por nombre o enlace…"
+                className="h-11 rounded-full border-input bg-card pr-10 pl-10"
+              />
+              {categoryQuery && (
+                <button
+                  type="button"
+                  onClick={() => setCategoryQuery("")}
+                  aria-label="Limpiar búsqueda de categorías"
+                  className="absolute top-1/2 right-3 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
             <Button
               onClick={() => {
                 setFormCategoria(emptyCategory);
@@ -1733,6 +2182,51 @@ export function AdminView() {
               <Plus className="mr-1.5 h-4 w-4" />
               Nueva categoría
             </Button>
+          </div>
+
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-[1.4rem] bg-card p-3.5 shadow-card sm:p-4">
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Visibilidad de categorías">
+              {(
+                [
+                  { id: "all", label: `Todas (${categories.length})`, Icon: null },
+                  { id: "visible", label: `Visibles (${categoriesActiveCount})`, Icon: Eye },
+                  { id: "hidden", label: `Ocultas (${categoriesHiddenCount})`, Icon: EyeOff },
+                ] as const
+              ).map(({ id, label, Icon }) => {
+                const active = categoryVisibility === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setCategoryVisibility(id)}
+                    className={cn(
+                      "inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-medium transition",
+                      active
+                        ? "bg-foreground text-background shadow-card"
+                        : "border border-input bg-background text-foreground hover:border-camel"
+                    )}
+                  >
+                    {Icon && <Icon className="h-3.5 w-3.5" />}
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-2 text-[11.5px] text-muted-foreground">
+              <span>
+                {filteredCategories.length} de {categories.length}
+              </span>
+              {hasCategoryFilters && (
+                <button
+                  type="button"
+                  onClick={limpiarFiltrosCategoria}
+                  className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-[11px] font-medium text-foreground transition hover:bg-secondary/80"
+                >
+                  <X className="h-3 w-3" />
+                  Limpiar
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Tabla (escritorio) */}
@@ -1749,7 +2243,7 @@ export function AdminView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {categories.map((c) => (
+                  {filteredCategories.map((c) => (
                     <tr key={c.id} className="border-b border-border/60 last:border-0">
                       <td className="px-5 py-3.5 font-medium">{c.name}</td>
                       <td className="px-4 py-3.5 font-mono text-[12px] text-muted-foreground">
@@ -1811,16 +2305,32 @@ export function AdminView() {
                 </tbody>
               </table>
             </div>
-            {categories.length === 0 && (
-              <p className="px-5 py-8 text-center text-sm text-muted-foreground">
-                Todavía no hay categorías.
-              </p>
+            {filteredCategories.length === 0 && (
+              <div className="px-5 py-8 text-center text-sm text-muted-foreground">
+                {cargandoCategorias && categories.length === 0 ? (
+                  <p>Cargando categorías…</p>
+                ) : hasCategoryFilters && categories.length > 0 ? (
+                  <div className="space-y-3">
+                    <p>Ninguna categoría coincide con el filtro actual.</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={limpiarFiltrosCategoria}
+                      className="h-9 rounded-full border-input bg-card px-4 text-xs"
+                    >
+                      Limpiar filtros
+                    </Button>
+                  </div>
+                ) : (
+                  <p>Todavía no hay categorías.</p>
+                )}
+              </div>
             )}
           </div>
 
           {/* Tarjetas (móvil) */}
           <div className="space-y-3 md:hidden">
-            {categories.map((c) => (
+            {filteredCategories.map((c) => (
               <div
                 key={c.id}
                 className="rounded-[1.3rem] bg-card p-3.5 shadow-card"
@@ -1886,17 +2396,33 @@ export function AdminView() {
                 </div>
               </div>
             ))}
-            {categories.length === 0 && (
-              <p className="rounded-[1.3rem] bg-card px-4 py-8 text-center text-sm text-muted-foreground shadow-card">
-                Todavía no hay categorías.
-              </p>
+            {filteredCategories.length === 0 && (
+              <div className="rounded-[1.3rem] bg-card px-4 py-8 text-center text-sm text-muted-foreground shadow-card">
+                {cargandoCategorias && categories.length === 0 ? (
+                  <p>Cargando categorías…</p>
+                ) : hasCategoryFilters && categories.length > 0 ? (
+                  <div className="space-y-3">
+                    <p>Ninguna categoría coincide con el filtro actual.</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={limpiarFiltrosCategoria}
+                      className="h-9 rounded-full border-input bg-card px-4 text-xs"
+                    >
+                      Limpiar filtros
+                    </Button>
+                  </div>
+                ) : (
+                  <p>Todavía no hay categorías.</p>
+                )}
+              </div>
             )}
           </div>
         </TabsContent>
 
         {/* ── Solicitudes ── */}
         <TabsContent value="pedidos" className="mt-5">
-          {/* Filtro por fecha o rango (afecta solicitudes y KPIs) */}
+          {/* Filtro por fecha/rango (afecta estadísticas y lista) + filtros operativos del listado */}
           <div className="mb-4 rounded-[1.4rem] bg-card p-3.5 shadow-card sm:p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -1911,14 +2437,14 @@ export function AdminView() {
                   {ordersTotalItems}{" "}
                   {ordersTotalItems === 1 ? "solicitud" : "solicitudes"}
                 </span>
-                {filtroFechaActivo && (
+                {hasOrderAnyFilter && (
                   <button
                     type="button"
-                    onClick={limpiarFiltroFecha}
+                    onClick={limpiarFiltrosSolicitudes}
                     className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-[11px] font-medium text-foreground transition hover:bg-secondary/80"
                   >
                     <X className="h-3 w-3" />
-                    Limpiar
+                    Limpiar todo
                   </button>
                 )}
               </div>
@@ -2013,9 +2539,128 @@ export function AdminView() {
               </p>
             ) : (
               <p className="mt-2.5 text-[11.5px] text-muted-foreground">
-                Este filtro también actualiza las estadísticas mostradas arriba.
+                La fecha también actualiza las estadísticas mostradas arriba.
               </p>
             )}
+
+            <div className="mt-4 border-t border-border/70 pt-4">
+              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                <SlidersHorizontal className="h-3.5 w-3.5 text-camel-deep" />
+                Filtrar listado
+              </p>
+
+              <div
+                className="mt-2.5 flex flex-wrap gap-1.5"
+                role="group"
+                aria-label="Estado de solicitudes"
+              >
+                {(
+                  [
+                    { id: "all", label: "Todas" },
+                    { id: "requested", label: "Solicitadas" },
+                    { id: "closed", label: "Vendidas" },
+                    { id: "cancelled", label: "Canceladas" },
+                  ] as const
+                ).map(({ id, label }) => {
+                  const active = orderStatus === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => {
+                        setOrderStatus(id);
+                        setOrdersPage(1);
+                      }}
+                      className={cn(
+                        "h-9 rounded-full px-3.5 text-xs font-medium transition",
+                        active
+                          ? "bg-foreground text-background shadow-card"
+                          : "border border-input bg-background text-foreground hover:border-camel"
+                      )}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="relative min-w-0 sm:col-span-2">
+                  <Search className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={orderQuery}
+                    onChange={(e) => setOrderQuery(e.target.value)}
+                    placeholder="Buscar por código (NM-…), producto o vendedor…"
+                    className="h-10 rounded-xl border-input bg-background pr-9 pl-9 text-xs"
+                  />
+                  {orderQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOrderQuery("");
+                        setDebouncedOrderQuery("");
+                        setOrdersPage(1);
+                      }}
+                      aria-label="Limpiar búsqueda de solicitudes"
+                      className="absolute top-1/2 right-2.5 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="min-w-0">
+                  <Select
+                    value={orderReferral}
+                    onValueChange={(v) => {
+                      setOrderReferral(v);
+                      setOrdersPage(1);
+                    }}
+                  >
+                    <SelectTrigger
+                      aria-label="Filtrar por origen de enlace"
+                      className="w-full min-w-0 rounded-xl border-input bg-background text-xs data-[size=default]:h-10"
+                    >
+                      <SelectValue placeholder="Origen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos los orígenes</SelectItem>
+                      <SelectItem value="any">Con enlace de vendedor</SelectItem>
+                      <SelectItem value="none">Sin enlace (directas)</SelectItem>
+                      {referralFilterOptions.map((opt) => (
+                        <SelectItem key={opt.code} value={opt.code}>
+                          {opt.label} (?v={opt.code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="min-w-0">
+                  <Select
+                    value={orderPriceFilter}
+                    onValueChange={(v) => {
+                      setOrderPriceFilter(v as "all" | "unpriced" | "priced");
+                      setOrdersPage(1);
+                    }}
+                  >
+                    <SelectTrigger
+                      aria-label="Filtrar por precios de la solicitud"
+                      className="w-full min-w-0 rounded-xl border-input bg-background text-xs data-[size=default]:h-10"
+                    >
+                      <SelectValue placeholder="Precios" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Con o sin precio</SelectItem>
+                      <SelectItem value="unpriced">
+                        Con artículos sin precio
+                      </SelectItem>
+                      <SelectItem value="priced">Todos con precio</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Tabla (escritorio) */}
@@ -2094,13 +2739,25 @@ export function AdminView() {
               </table>
             </div>
             {orders.length === 0 && (
-              <p className="px-5 py-8 text-center text-sm text-muted-foreground">
-                {cargandoPedidos
-                  ? "Cargando solicitudes…"
-                  : filtroFechaActivo
-                    ? "No hay solicitudes en el período seleccionado."
-                    : "Todavía no hay solicitudes."}
-              </p>
+              <div className="px-5 py-8 text-center text-sm text-muted-foreground">
+                {cargandoPedidos ? (
+                  <p>Cargando solicitudes…</p>
+                ) : hasOrderAnyFilter ? (
+                  <div className="space-y-3">
+                    <p>Ninguna solicitud coincide con los filtros actuales.</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={limpiarFiltrosSolicitudes}
+                      className="h-9 rounded-full border-input bg-card px-4 text-xs"
+                    >
+                      Limpiar filtros
+                    </Button>
+                  </div>
+                ) : (
+                  <p>Todavía no hay solicitudes.</p>
+                )}
+              </div>
             )}
           </div>
 
@@ -2185,13 +2842,25 @@ export function AdminView() {
             })}
 
             {orders.length === 0 && (
-              <p className="rounded-[1.3rem] bg-card px-4 py-8 text-center text-sm text-muted-foreground shadow-card">
-                {cargandoPedidos
-                  ? "Cargando solicitudes…"
-                  : filtroFechaActivo
-                    ? "No hay solicitudes en el período seleccionado."
-                    : "Todavía no hay solicitudes."}
-              </p>
+              <div className="rounded-[1.3rem] bg-card px-4 py-8 text-center text-sm text-muted-foreground shadow-card">
+                {cargandoPedidos ? (
+                  <p>Cargando solicitudes…</p>
+                ) : hasOrderAnyFilter ? (
+                  <div className="space-y-3">
+                    <p>Ninguna solicitud coincide con los filtros actuales.</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={limpiarFiltrosSolicitudes}
+                      className="h-9 rounded-full border-input bg-card px-4 text-xs"
+                    >
+                      Limpiar filtros
+                    </Button>
+                  </div>
+                ) : (
+                  <p>Todavía no hay solicitudes.</p>
+                )}
+              </div>
             )}
           </div>
 

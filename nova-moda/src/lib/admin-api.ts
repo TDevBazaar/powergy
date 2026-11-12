@@ -140,8 +140,17 @@ export interface CloseOrderPayload {
 
 /* ── Llamadas ─────────────────────────────────────────────────── */
 
+export type AdminProductVisibility = "all" | "visible" | "hidden";
+export type AdminProductSort = "destacados" | "precio-asc" | "precio-desc" | "nuevos";
+
 export interface AdminProductsQuery {
   term?: string;
+  category?: string;
+  visibility?: AdminProductVisibility;
+  hasPrice?: boolean;
+  onSale?: boolean;
+  featured?: boolean;
+  sort?: AdminProductSort;
   page?: number;
   pageSize?: number;
   signal?: AbortSignal;
@@ -149,6 +158,9 @@ export interface AdminProductsQuery {
 
 export interface AdminOrdersQuery {
   status?: string;
+  q?: string;
+  referral?: string;
+  hasUnpriced?: boolean;
   from?: string;
   to?: string;
   page?: number;
@@ -167,12 +179,34 @@ export function fetchAdminProducts(
   options: string | AdminProductsQuery = {}
 ): Promise<ApiPage<ApiProduct>> {
   const query = typeof options === "string" ? { term: options } : options;
+  const visibility = query.visibility ?? "all";
   const params = new URLSearchParams({
     store: NOVA_STORE,
-    includeInactive: "true",
+    includeInactive: visibility === "visible" ? "false" : "true",
     page: String(query.page ?? 1),
     pageSize: String(query.pageSize ?? 20),
   });
+  if (visibility === "visible") {
+    params.set("isActive", "true");
+  } else if (visibility === "hidden") {
+    params.set("isActive", "false");
+  }
+  const cleanCategory = query.category?.trim();
+  if (cleanCategory) {
+    params.set("category", cleanCategory);
+  }
+  if (query.hasPrice !== undefined) {
+    params.set("hasPrice", String(query.hasPrice));
+  }
+  if (query.onSale !== undefined) {
+    params.set("onSale", String(query.onSale));
+  }
+  if (query.featured !== undefined) {
+    params.set("featured", String(query.featured));
+  }
+  if (query.sort) {
+    params.set("sort", query.sort);
+  }
   const cleanTerm = query.term?.trim();
   if (cleanTerm) {
     params.set("q", cleanTerm);
@@ -198,6 +232,11 @@ export function fetchAdminOrders(
     pageSize: String(options.pageSize ?? 20),
   });
   if (options.status?.trim()) params.set("status", options.status.trim());
+  if (options.q?.trim()) params.set("q", options.q.trim());
+  if (options.referral?.trim()) params.set("referral", options.referral.trim());
+  if (options.hasUnpriced !== undefined) {
+    params.set("hasUnpriced", String(options.hasUnpriced));
+  }
   if (options.from?.trim()) params.set("from", options.from.trim());
   if (options.to?.trim()) params.set("to", options.to.trim());
   return apiGet<ApiPage<AdminOrderListItem>>(

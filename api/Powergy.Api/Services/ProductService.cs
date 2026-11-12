@@ -401,6 +401,7 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
             var pattern = $"%{EscapeLike(token)}%";
             query = query.Where(product =>
                 EF.Functions.ILike(product.Name, pattern, "\\")
+                || EF.Functions.ILike(product.Slug, pattern, "\\")
                 || EF.Functions.ILike(product.Brand, pattern, "\\")
                 || EF.Functions.ILike(product.Model, pattern, "\\")
                 || EF.Functions.ILike(product.Subcategory, pattern, "\\")

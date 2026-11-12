@@ -158,7 +158,7 @@ public sealed class CustomerOrderService(
     {
         ValidateDateRange(request.From, request.To);
         var status = request.Status?.Trim().ToLowerInvariant();
-        if (status is not null && !CustomerOrderStatuses.All.Contains(status))
+        if (!string.IsNullOrEmpty(status) && !CustomerOrderStatuses.All.Contains(status))
         {
             throw new ApiValidationException("El estado del pedido no es válido.");
         }
@@ -167,10 +167,38 @@ public sealed class CustomerOrderService(
         var query = db.CustomerOrders
             .AsNoTracking()
             .Where(order => order.Store == store);
-        if (status is not null)
+        if (!string.IsNullOrEmpty(status))
         {
             query = query.Where(order => order.Status == status);
         }
+
+        var referral = request.Referral?.Trim().ToLowerInvariant();
+        if (!string.IsNullOrEmpty(referral))
+        {
+            if (referral == "any")
+            {
+                query = query.Where(order => order.ReferralCode != null && order.ReferralCode != "");
+            }
+            else if (referral == "none")
+            {
+                query = query.Where(order => order.ReferralCode == null || order.ReferralCode == "");
+            }
+            else
+            {
+                query = query.Where(order => order.ReferralCode == referral);
+            }
+        }
+
+        if (request.HasUnpriced is { } hasUnpriced)
+        {
+            query = hasUnpriced
+                ? query.Where(order => order.Lines.Any(line =>
+                    line.RemovedAt == null && (line.UnitPriceUsd == null || line.UnitPriceUsd <= 0m)))
+                : query.Where(order => !order.Lines.Any(line =>
+                    line.RemovedAt == null && (line.UnitPriceUsd == null || line.UnitPriceUsd <= 0m)));
+        }
+
+        query = ApplyOrderSearchTerms(query, request.Q);
 
         if (request.From is { } from)
         {
@@ -495,6 +523,102 @@ public sealed class CustomerOrderService(
             SqlState: PostgresErrorCodes.UniqueViolation,
             ConstraintName: "IX_customer_orders_idempotency_key"
         };
+
+    private static IQueryable<CustomerOrder> ApplyOrderSearchTerms(
+        IQueryable<CustomerOrder> query,
+        string? rawQuery)
+    {
+        var trimmed = rawQuery?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            return query;
+        }
+
+        var tokens = trimmed
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Take(6);
+
+        foreach (var token in tokens)
+        {
+            var cleanToken = token.TrimStart('#');
+            if (cleanToken.Length == 0)
+            {
+                continue;
+            }
+
+            var pattern = $"%{EscapeLike(cleanToken)}%";
+            var uuidCandidate = ExtractOrderIdPrefix(cleanToken);
+            if (uuidCandidate is not null)
+            {
+                var uuidPattern = $"{EscapeLike(uuidCandidate)}%";
+                query = query.Where(order =>
+                    EF.Functions.ILike(order.Id.ToString(), uuidPattern, "\\")
+                    || (order.ReferralCode != null
+                        && EF.Functions.ILike(order.ReferralCode, pattern, "\\"))
+                    || (order.ReferredByAdminUser != null
+                        && order.ReferredByAdminUser.DisplayName != null
+                        && EF.Functions.ILike(order.ReferredByAdminUser.DisplayName, pattern, "\\"))
+                    || order.Lines.Any(line =>
+                        line.RemovedAt == null
+                        && (EF.Functions.ILike(line.ProductName, pattern, "\\")
+                            || EF.Functions.ILike(line.ProductSlug, pattern, "\\")
+                            || EF.Functions.ILike(line.CategoryName, pattern, "\\")
+                            || EF.Functions.ILike(line.ProductId, pattern, "\\"))));
+            }
+            else
+            {
+                query = query.Where(order =>
+                    (order.ReferralCode != null
+                        && EF.Functions.ILike(order.ReferralCode, pattern, "\\"))
+                    || (order.ReferredByAdminUser != null
+                        && order.ReferredByAdminUser.DisplayName != null
+                        && EF.Functions.ILike(order.ReferredByAdminUser.DisplayName, pattern, "\\"))
+                    || order.Lines.Any(line =>
+                        line.RemovedAt == null
+                        && (EF.Functions.ILike(line.ProductName, pattern, "\\")
+                            || EF.Functions.ILike(line.ProductSlug, pattern, "\\")
+                            || EF.Functions.ILike(line.CategoryName, pattern, "\\")
+                            || EF.Functions.ILike(line.ProductId, pattern, "\\"))));
+            }
+        }
+
+        return query;
+    }
+
+    private static string? ExtractOrderIdPrefix(string token)
+    {
+        var dashIdx = token.IndexOf('-');
+        var candidate = token;
+        if (dashIdx is >= 2 and <= 4 && dashIdx < token.Length - 1)
+        {
+            var prefix = token[..dashIdx];
+            if (prefix.All(char.IsAsciiLetterOrDigit))
+            {
+                candidate = token[(dashIdx + 1)..];
+            }
+        }
+
+        if (candidate.Length is < 2 or > 36)
+        {
+            return null;
+        }
+
+        if (!candidate.Contains('-'))
+        {
+            return candidate.Length <= 8 && candidate.All(char.IsAsciiHexDigit)
+                ? candidate
+                : null;
+        }
+
+        return candidate.All(ch => ch == '-' || char.IsAsciiHexDigit(ch))
+            ? candidate
+            : null;
+    }
+
+    private static string EscapeLike(string value) =>
+        value.Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal);
 
     private static void ValidateDateRange(DateTimeOffset? from, DateTimeOffset? to)
     {
