@@ -7,6 +7,7 @@ import {
   Boxes,
   Calendar,
   CheckCircle2,
+  ChevronDown,
   Copy,
   Eye,
   EyeOff,
@@ -279,6 +280,9 @@ export function AdminView() {
   const [categoryQuery, setCategoryQuery] = useState("");
   const [categoryVisibility, setCategoryVisibility] =
     useState<AdminProductVisibility>("all");
+  const [showProductFilters, setShowProductFilters] = useState(false);
+  const [showCategoryFilters, setShowCategoryFilters] = useState(false);
+  const [showOrderFilters, setShowOrderFilters] = useState(false);
   const [modalProducto, setModalProducto] = useState(false);
   const [formProducto, setFormProducto] = useState<ProductForm>(emptyProduct);
   const [subiendoImagen, setSubiendoImagen] = useState(false);
@@ -391,6 +395,9 @@ export function AdminView() {
     setProductSort("destacados");
     setCategoryQuery("");
     setCategoryVisibility("all");
+    setShowProductFilters(false);
+    setShowCategoryFilters(false);
+    setShowOrderFilters(false);
     setOrderQuery("");
     setDebouncedOrderQuery("");
     setOrderStatus("all");
@@ -1526,12 +1533,20 @@ export function AdminView() {
   const activosDisplay =
     activeProductsCount ?? products.filter((p) => p.isActive).length;
   const filtroFechaActivo = dateFilter.preset !== "all";
-  const hasOrderAnyFilter =
-    filtroFechaActivo ||
-    Boolean(orderQuery.trim()) ||
-    orderStatus !== "all" ||
-    orderReferral !== "all" ||
-    orderPriceFilter !== "all";
+  const activeProductFiltersCount =
+    (productVisibility !== "all" ? 1 : 0) +
+    (productCategory !== "all" ? 1 : 0) +
+    (productPriceFilter !== "all" ? 1 : 0) +
+    (productTagFilter !== "all" ? 1 : 0) +
+    (productSort !== "destacados" ? 1 : 0);
+  const activeCategoryFiltersCount = categoryVisibility !== "all" ? 1 : 0;
+  const activeOrderFiltersCount =
+    (filtroFechaActivo ? 1 : 0) +
+    (orderStatus !== "all" ? 1 : 0) +
+    (orderQuery.trim() ? 1 : 0) +
+    (orderReferral !== "all" ? 1 : 0) +
+    (orderPriceFilter !== "all" ? 1 : 0);
+  const hasOrderAnyFilter = activeOrderFiltersCount > 0;
   const ordersTotalBadge = hasOrderListFilter
     ? (metrics?.requests ?? ordersUnfilteredTotal ?? ordersTotalItems)
     : ordersTotalItems;
@@ -1746,10 +1761,42 @@ export function AdminView() {
 
           <div className="mb-4 rounded-[1.4rem] bg-card p-3.5 shadow-card sm:p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => setShowProductFilters((prev) => !prev)}
+                aria-expanded={showProductFilters}
+                aria-controls="admin-product-filters-panel"
+                className="inline-flex items-center gap-2 py-0.5 text-left md:hidden"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5 shrink-0 text-camel-deep" />
+                <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Filtros
+                </span>
+                {activeProductFiltersCount > 0 && (
+                  <span className="inline-flex items-center rounded-full bg-camel px-2 py-0.5 text-[10.5px] font-semibold tabular-nums text-white">
+                    {activeProductFiltersCount}{" "}
+                    {activeProductFiltersCount === 1 ? "activo" : "activos"}
+                  </span>
+                )}
+                <ChevronDown
+                  className={cn(
+                    "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                    showProductFilters && "rotate-180"
+                  )}
+                />
+              </button>
+
+              <p className="hidden items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground md:flex">
                 <SlidersHorizontal className="h-3.5 w-3.5 text-camel-deep" />
                 Filtros del catálogo
+                {activeProductFiltersCount > 0 && (
+                  <span className="inline-flex items-center rounded-full bg-camel px-2 py-0.5 text-[10.5px] font-semibold normal-case tracking-normal tabular-nums text-white">
+                    {activeProductFiltersCount}{" "}
+                    {activeProductFiltersCount === 1 ? "activo" : "activos"}
+                  </span>
+                )}
               </p>
+
               <div className="flex items-center gap-2 text-[11.5px] text-muted-foreground">
                 {cargandoProductos && (
                   <Loader2 className="h-3.5 w-3.5 animate-spin text-camel-deep" />
@@ -1765,135 +1812,140 @@ export function AdminView() {
                     className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-[11px] font-medium text-foreground transition hover:bg-secondary/80"
                   >
                     <X className="h-3 w-3" />
-                    Limpiar filtros
+                    Limpiar
                   </button>
                 )}
               </div>
             </div>
 
-            <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="Visibilidad de productos">
-              {(
-                [
-                  { id: "all", label: "Todos", Icon: null },
-                  { id: "visible", label: "Visibles", Icon: Eye },
-                  { id: "hidden", label: "Ocultos", Icon: EyeOff },
-                ] as const
-              ).map(({ id, label, Icon }) => {
-                const active = productVisibility === id;
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => {
-                      setProductVisibility(id);
+            <div
+              id="admin-product-filters-panel"
+              className={cn(showProductFilters ? "mt-3 block" : "hidden md:mt-3 md:block")}
+            >
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Visibilidad de productos">
+                {(
+                  [
+                    { id: "all", label: "Todos", Icon: null },
+                    { id: "visible", label: "Visibles", Icon: Eye },
+                    { id: "hidden", label: "Ocultos", Icon: EyeOff },
+                  ] as const
+                ).map(({ id, label, Icon }) => {
+                  const active = productVisibility === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => {
+                        setProductVisibility(id);
+                        setProductsPage(1);
+                      }}
+                      className={cn(
+                        "inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-medium transition",
+                        active
+                          ? "bg-foreground text-background shadow-card"
+                          : "border border-input bg-background text-foreground hover:border-camel"
+                      )}
+                    >
+                      {Icon && <Icon className="h-3.5 w-3.5" />}
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="min-w-0">
+                  <Select
+                    value={productCategory}
+                    onValueChange={(v) => {
+                      setProductCategory(v);
                       setProductsPage(1);
                     }}
-                    className={cn(
-                      "inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-medium transition",
-                      active
-                        ? "bg-foreground text-background shadow-card"
-                        : "border border-input bg-background text-foreground hover:border-camel"
-                    )}
                   >
-                    {Icon && <Icon className="h-3.5 w-3.5" />}
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
+                    <SelectTrigger
+                      aria-label="Filtrar por categoría"
+                      className="w-full min-w-0 rounded-xl border-input bg-background text-xs data-[size=default]:h-10"
+                    >
+                      <SelectValue placeholder="Categoría" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas las categorías</SelectItem>
+                      {categories.map((c) => (
+                        <SelectItem key={c.id} value={c.slug}>
+                          {c.name}
+                          {c.isActive ? "" : " (oculta)"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="min-w-0">
-                <Select
-                  value={productCategory}
-                  onValueChange={(v) => {
-                    setProductCategory(v);
-                    setProductsPage(1);
-                  }}
-                >
-                  <SelectTrigger
-                    aria-label="Filtrar por categoría"
-                    className="w-full min-w-0 rounded-xl border-input bg-background text-xs data-[size=default]:h-10"
+                <div className="min-w-0">
+                  <Select
+                    value={productPriceFilter}
+                    onValueChange={(v) => {
+                      setProductPriceFilter(v as "all" | "priced" | "unpriced");
+                      setProductsPage(1);
+                    }}
                   >
-                    <SelectValue placeholder="Categoría" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas las categorías</SelectItem>
-                    {categories.map((c) => (
-                      <SelectItem key={c.id} value={c.slug}>
-                        {c.name}
-                        {c.isActive ? "" : " (oculta)"}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                    <SelectTrigger
+                      aria-label="Filtrar por precio"
+                      className="w-full min-w-0 rounded-xl border-input bg-background text-xs data-[size=default]:h-10"
+                    >
+                      <SelectValue placeholder="Precio" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos los precios</SelectItem>
+                      <SelectItem value="priced">Con precio definido</SelectItem>
+                      <SelectItem value="unpriced">Sin precio (consultar)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="min-w-0">
-                <Select
-                  value={productPriceFilter}
-                  onValueChange={(v) => {
-                    setProductPriceFilter(v as "all" | "priced" | "unpriced");
-                    setProductsPage(1);
-                  }}
-                >
-                  <SelectTrigger
-                    aria-label="Filtrar por precio"
-                    className="w-full min-w-0 rounded-xl border-input bg-background text-xs data-[size=default]:h-10"
+                <div className="min-w-0">
+                  <Select
+                    value={productTagFilter}
+                    onValueChange={(v) => {
+                      setProductTagFilter(v as "all" | "onSale" | "featured");
+                      setProductsPage(1);
+                    }}
                   >
-                    <SelectValue placeholder="Precio" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los precios</SelectItem>
-                    <SelectItem value="priced">Con precio definido</SelectItem>
-                    <SelectItem value="unpriced">Sin precio (consultar)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                    <SelectTrigger
+                      aria-label="Filtrar por etiqueta"
+                      className="w-full min-w-0 rounded-xl border-input bg-background text-xs data-[size=default]:h-10"
+                    >
+                      <SelectValue placeholder="Etiqueta" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas las etiquetas</SelectItem>
+                      <SelectItem value="onSale">En oferta</SelectItem>
+                      <SelectItem value="featured">Populares</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="min-w-0">
-                <Select
-                  value={productTagFilter}
-                  onValueChange={(v) => {
-                    setProductTagFilter(v as "all" | "onSale" | "featured");
-                    setProductsPage(1);
-                  }}
-                >
-                  <SelectTrigger
-                    aria-label="Filtrar por etiqueta"
-                    className="w-full min-w-0 rounded-xl border-input bg-background text-xs data-[size=default]:h-10"
+                <div className="min-w-0">
+                  <Select
+                    value={productSort}
+                    onValueChange={(v) => {
+                      setProductSort(v as AdminProductSort);
+                      setProductsPage(1);
+                    }}
                   >
-                    <SelectValue placeholder="Etiqueta" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas las etiquetas</SelectItem>
-                    <SelectItem value="onSale">En oferta</SelectItem>
-                    <SelectItem value="featured">Populares</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="min-w-0">
-                <Select
-                  value={productSort}
-                  onValueChange={(v) => {
-                    setProductSort(v as AdminProductSort);
-                    setProductsPage(1);
-                  }}
-                >
-                  <SelectTrigger
-                    aria-label="Ordenar productos"
-                    className="w-full min-w-0 rounded-xl border-input bg-background text-xs data-[size=default]:h-10"
-                  >
-                    <SelectValue placeholder="Ordenar" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="destacados">Orden: Destacados</SelectItem>
-                    <SelectItem value="nuevos">Orden: Más recientes</SelectItem>
-                    <SelectItem value="precio-asc">Precio: menor a mayor</SelectItem>
-                    <SelectItem value="precio-desc">Precio: mayor a menor</SelectItem>
-                  </SelectContent>
-                </Select>
+                    <SelectTrigger
+                      aria-label="Ordenar productos"
+                      className="w-full min-w-0 rounded-xl border-input bg-background text-xs data-[size=default]:h-10"
+                    >
+                      <SelectValue placeholder="Ordenar" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="destacados">Orden: Destacados</SelectItem>
+                      <SelectItem value="nuevos">Orden: Más recientes</SelectItem>
+                      <SelectItem value="precio-asc">Precio: menor a mayor</SelectItem>
+                      <SelectItem value="precio-desc">Precio: mayor a menor</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
           </div>
@@ -2184,48 +2236,90 @@ export function AdminView() {
             </Button>
           </div>
 
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-[1.4rem] bg-card p-3.5 shadow-card sm:p-4">
-            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Visibilidad de categorías">
-              {(
-                [
-                  { id: "all", label: `Todas (${categories.length})`, Icon: null },
-                  { id: "visible", label: `Visibles (${categoriesActiveCount})`, Icon: Eye },
-                  { id: "hidden", label: `Ocultas (${categoriesHiddenCount})`, Icon: EyeOff },
-                ] as const
-              ).map(({ id, label, Icon }) => {
-                const active = categoryVisibility === id;
-                return (
+          <div className="mb-4 rounded-[1.4rem] bg-card p-3.5 shadow-card sm:p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setShowCategoryFilters((prev) => !prev)}
+                aria-expanded={showCategoryFilters}
+                aria-controls="admin-category-filters-panel"
+                className="inline-flex items-center gap-2 py-0.5 text-left md:hidden"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5 shrink-0 text-camel-deep" />
+                <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Filtros
+                </span>
+                {activeCategoryFiltersCount > 0 && (
+                  <span className="inline-flex items-center rounded-full bg-camel px-2 py-0.5 text-[10.5px] font-semibold tabular-nums text-white">
+                    {activeCategoryFiltersCount} activo
+                  </span>
+                )}
+                <ChevronDown
+                  className={cn(
+                    "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                    showCategoryFilters && "rotate-180"
+                  )}
+                />
+              </button>
+
+              <p className="hidden items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground md:flex">
+                <SlidersHorizontal className="h-3.5 w-3.5 text-camel-deep" />
+                Estado de visibilidad
+                {activeCategoryFiltersCount > 0 && (
+                  <span className="inline-flex items-center rounded-full bg-camel px-2 py-0.5 text-[10.5px] font-semibold normal-case tracking-normal tabular-nums text-white">
+                    {activeCategoryFiltersCount} activo
+                  </span>
+                )}
+              </p>
+
+              <div className="flex items-center gap-2 text-[11.5px] text-muted-foreground">
+                <span>
+                  {filteredCategories.length} de {categories.length}
+                </span>
+                {hasCategoryFilters && (
                   <button
-                    key={id}
                     type="button"
-                    onClick={() => setCategoryVisibility(id)}
-                    className={cn(
-                      "inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-medium transition",
-                      active
-                        ? "bg-foreground text-background shadow-card"
-                        : "border border-input bg-background text-foreground hover:border-camel"
-                    )}
+                    onClick={limpiarFiltrosCategoria}
+                    className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-[11px] font-medium text-foreground transition hover:bg-secondary/80"
                   >
-                    {Icon && <Icon className="h-3.5 w-3.5" />}
-                    {label}
+                    <X className="h-3 w-3" />
+                    Limpiar
                   </button>
-                );
-              })}
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-2 text-[11.5px] text-muted-foreground">
-              <span>
-                {filteredCategories.length} de {categories.length}
-              </span>
-              {hasCategoryFilters && (
-                <button
-                  type="button"
-                  onClick={limpiarFiltrosCategoria}
-                  className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-[11px] font-medium text-foreground transition hover:bg-secondary/80"
-                >
-                  <X className="h-3 w-3" />
-                  Limpiar
-                </button>
-              )}
+
+            <div
+              id="admin-category-filters-panel"
+              className={cn(showCategoryFilters ? "mt-3 block" : "hidden md:mt-3 md:block")}
+            >
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Visibilidad de categorías">
+                {(
+                  [
+                    { id: "all", label: `Todas (${categories.length})`, Icon: null },
+                    { id: "visible", label: `Visibles (${categoriesActiveCount})`, Icon: Eye },
+                    { id: "hidden", label: `Ocultas (${categoriesHiddenCount})`, Icon: EyeOff },
+                  ] as const
+                ).map(({ id, label, Icon }) => {
+                  const active = categoryVisibility === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setCategoryVisibility(id)}
+                      className={cn(
+                        "inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-medium transition",
+                        active
+                          ? "bg-foreground text-background shadow-card"
+                          : "border border-input bg-background text-foreground hover:border-camel"
+                      )}
+                    >
+                      {Icon && <Icon className="h-3.5 w-3.5" />}
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
@@ -2425,10 +2519,42 @@ export function AdminView() {
           {/* Filtro por fecha/rango (afecta estadísticas y lista) + filtros operativos del listado */}
           <div className="mb-4 rounded-[1.4rem] bg-card p-3.5 shadow-card sm:p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => setShowOrderFilters((prev) => !prev)}
+                aria-expanded={showOrderFilters}
+                aria-controls="admin-order-filters-panel"
+                className="inline-flex items-center gap-2 py-0.5 text-left md:hidden"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5 shrink-0 text-camel-deep" />
+                <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Filtros
+                </span>
+                {activeOrderFiltersCount > 0 && (
+                  <span className="inline-flex items-center rounded-full bg-camel px-2 py-0.5 text-[10.5px] font-semibold tabular-nums text-white">
+                    {activeOrderFiltersCount}{" "}
+                    {activeOrderFiltersCount === 1 ? "activo" : "activos"}
+                  </span>
+                )}
+                <ChevronDown
+                  className={cn(
+                    "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                    showOrderFilters && "rotate-180"
+                  )}
+                />
+              </button>
+
+              <p className="hidden items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground md:flex">
                 <Calendar className="h-3.5 w-3.5 text-camel-deep" />
                 Filtrar por fecha o rango
+                {activeOrderFiltersCount > 0 && (
+                  <span className="inline-flex items-center rounded-full bg-camel px-2 py-0.5 text-[10.5px] font-semibold normal-case tracking-normal tabular-nums text-white">
+                    {activeOrderFiltersCount}{" "}
+                    {activeOrderFiltersCount === 1 ? "activo" : "activos"}
+                  </span>
+                )}
               </p>
+
               <div className="flex items-center gap-2 text-[11.5px] text-muted-foreground">
                 {cargandoPedidos && (
                   <Loader2 className="h-3.5 w-3.5 animate-spin text-camel-deep" />
@@ -2444,133 +2570,30 @@ export function AdminView() {
                     className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-[11px] font-medium text-foreground transition hover:bg-secondary/80"
                   >
                     <X className="h-3 w-3" />
-                    Limpiar todo
+                    Limpiar
                   </button>
                 )}
               </div>
             </div>
 
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {DATE_PRESETS.map((preset) => {
-                const active = dateFilter.preset === preset.id;
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => seleccionarPresetFecha(preset.id)}
-                    className={cn(
-                      "h-9 rounded-full px-3.5 text-xs font-medium transition",
-                      active
-                        ? "bg-foreground text-background shadow-card"
-                        : "border border-input bg-background text-foreground hover:border-camel"
-                    )}
-                  >
-                    {preset.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {dateFilter.preset === "single" && (
-              <div className="mt-3 grid max-w-xs gap-1.5">
-                <Label htmlFor="orders-single-date" className="text-xs">
-                  Día exacto
-                </Label>
-                <Input
-                  id="orders-single-date"
-                  type="date"
-                  value={dateFilter.singleDate}
-                  onChange={(e) => {
-                    setOrdersPage(1);
-                    setDateFilter((prev) => ({
-                      ...prev,
-                      singleDate: e.target.value,
-                    }));
-                  }}
-                  className="h-10 rounded-xl border-input bg-background"
-                />
-              </div>
-            )}
-
-            {dateFilter.preset === "range" && (
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:max-w-lg sm:grid-cols-2">
-                <div>
-                  <Label htmlFor="orders-from-date" className="text-xs">
-                    Desde
-                  </Label>
-                  <Input
-                    id="orders-from-date"
-                    type="date"
-                    value={dateFilter.fromDate}
-                    onChange={(e) => {
-                      setOrdersPage(1);
-                      setDateFilter((prev) => ({
-                        ...prev,
-                        fromDate: e.target.value,
-                      }));
-                    }}
-                    className="mt-1 h-10 rounded-xl border-input bg-background"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="orders-to-date" className="text-xs">
-                    Hasta
-                  </Label>
-                  <Input
-                    id="orders-to-date"
-                    type="date"
-                    value={dateFilter.toDate}
-                    onChange={(e) => {
-                      setOrdersPage(1);
-                      setDateFilter((prev) => ({
-                        ...prev,
-                        toDate: e.target.value,
-                      }));
-                    }}
-                    className="mt-1 h-10 rounded-xl border-input bg-background"
-                  />
-                </div>
-              </div>
-            )}
-
-            {resolvedDates.validationError ? (
-              <p className="mt-2.5 text-xs text-destructive">
+            {resolvedDates.validationError && !showOrderFilters && (
+              <p className="mt-2 text-xs text-destructive md:hidden">
                 {resolvedDates.validationError}
               </p>
-            ) : (
-              <p className="mt-2.5 text-[11.5px] text-muted-foreground">
-                La fecha también actualiza las estadísticas mostradas arriba.
-              </p>
             )}
 
-            <div className="mt-4 border-t border-border/70 pt-4">
-              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                <SlidersHorizontal className="h-3.5 w-3.5 text-camel-deep" />
-                Filtrar listado
-              </p>
-
-              <div
-                className="mt-2.5 flex flex-wrap gap-1.5"
-                role="group"
-                aria-label="Estado de solicitudes"
-              >
-                {(
-                  [
-                    { id: "all", label: "Todas" },
-                    { id: "requested", label: "Solicitadas" },
-                    { id: "closed", label: "Vendidas" },
-                    { id: "cancelled", label: "Canceladas" },
-                  ] as const
-                ).map(({ id, label }) => {
-                  const active = orderStatus === id;
+            <div
+              id="admin-order-filters-panel"
+              className={cn(showOrderFilters ? "mt-3 block" : "hidden md:mt-3 md:block")}
+            >
+              <div className="flex flex-wrap gap-1.5">
+                {DATE_PRESETS.map((preset) => {
+                  const active = dateFilter.preset === preset.id;
                   return (
                     <button
-                      key={id}
+                      key={preset.id}
                       type="button"
-                      onClick={() => {
-                        setOrderStatus(id);
-                        setOrdersPage(1);
-                      }}
+                      onClick={() => seleccionarPresetFecha(preset.id)}
                       className={cn(
                         "h-9 rounded-full px-3.5 text-xs font-medium transition",
                         active
@@ -2578,86 +2601,200 @@ export function AdminView() {
                           : "border border-input bg-background text-foreground hover:border-camel"
                       )}
                     >
-                      {label}
+                      {preset.label}
                     </button>
                   );
                 })}
               </div>
 
-              <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="relative min-w-0 sm:col-span-2">
-                  <Search className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              {dateFilter.preset === "single" && (
+                <div className="mt-3 grid max-w-xs gap-1.5">
+                  <Label htmlFor="orders-single-date" className="text-xs">
+                    Día exacto
+                  </Label>
                   <Input
-                    value={orderQuery}
-                    onChange={(e) => setOrderQuery(e.target.value)}
-                    placeholder="Buscar por código (NM-…), producto o vendedor…"
-                    className="h-10 rounded-xl border-input bg-background pr-9 pl-9 text-xs"
+                    id="orders-single-date"
+                    type="date"
+                    value={dateFilter.singleDate}
+                    onChange={(e) => {
+                      setOrdersPage(1);
+                      setDateFilter((prev) => ({
+                        ...prev,
+                        singleDate: e.target.value,
+                      }));
+                    }}
+                    className="h-10 rounded-xl border-input bg-background"
                   />
-                  {orderQuery && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOrderQuery("");
-                        setDebouncedOrderQuery("");
+                </div>
+              )}
+
+              {dateFilter.preset === "range" && (
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:max-w-lg sm:grid-cols-2">
+                  <div>
+                    <Label htmlFor="orders-from-date" className="text-xs">
+                      Desde
+                    </Label>
+                    <Input
+                      id="orders-from-date"
+                      type="date"
+                      value={dateFilter.fromDate}
+                      onChange={(e) => {
+                        setOrdersPage(1);
+                        setDateFilter((prev) => ({
+                          ...prev,
+                          fromDate: e.target.value,
+                        }));
+                      }}
+                      className="mt-1 h-10 rounded-xl border-input bg-background"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="orders-to-date" className="text-xs">
+                      Hasta
+                    </Label>
+                    <Input
+                      id="orders-to-date"
+                      type="date"
+                      value={dateFilter.toDate}
+                      onChange={(e) => {
+                        setOrdersPage(1);
+                        setDateFilter((prev) => ({
+                          ...prev,
+                          toDate: e.target.value,
+                        }));
+                      }}
+                      className="mt-1 h-10 rounded-xl border-input bg-background"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {resolvedDates.validationError ? (
+                <p className="mt-2.5 text-xs text-destructive">
+                  {resolvedDates.validationError}
+                </p>
+              ) : (
+                <p className="mt-2.5 text-[11.5px] text-muted-foreground">
+                  La fecha también actualiza las estadísticas mostradas arriba.
+                </p>
+              )}
+
+              <div className="mt-4 border-t border-border/70 pt-4">
+                <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  <SlidersHorizontal className="h-3.5 w-3.5 text-camel-deep" />
+                  Filtrar listado
+                </p>
+
+                <div
+                  className="mt-2.5 flex flex-wrap gap-1.5"
+                  role="group"
+                  aria-label="Estado de solicitudes"
+                >
+                  {(
+                    [
+                      { id: "all", label: "Todas" },
+                      { id: "requested", label: "Solicitadas" },
+                      { id: "closed", label: "Vendidas" },
+                      { id: "cancelled", label: "Canceladas" },
+                    ] as const
+                  ).map(({ id, label }) => {
+                    const active = orderStatus === id;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => {
+                          setOrderStatus(id);
+                          setOrdersPage(1);
+                        }}
+                        className={cn(
+                          "h-9 rounded-full px-3.5 text-xs font-medium transition",
+                          active
+                            ? "bg-foreground text-background shadow-card"
+                            : "border border-input bg-background text-foreground hover:border-camel"
+                        )}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="relative min-w-0 sm:col-span-2">
+                    <Search className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={orderQuery}
+                      onChange={(e) => setOrderQuery(e.target.value)}
+                      placeholder="Buscar por código (NM-…), producto o vendedor…"
+                      className="h-10 rounded-xl border-input bg-background pr-9 pl-9 text-xs"
+                    />
+                    {orderQuery && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOrderQuery("");
+                          setDebouncedOrderQuery("");
+                          setOrdersPage(1);
+                        }}
+                        aria-label="Limpiar búsqueda de solicitudes"
+                        className="absolute top-1/2 right-2.5 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="min-w-0">
+                    <Select
+                      value={orderReferral}
+                      onValueChange={(v) => {
+                        setOrderReferral(v);
                         setOrdersPage(1);
                       }}
-                      aria-label="Limpiar búsqueda de solicitudes"
-                      className="absolute top-1/2 right-2.5 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground"
                     >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
+                      <SelectTrigger
+                        aria-label="Filtrar por origen de enlace"
+                        className="w-full min-w-0 rounded-xl border-input bg-background text-xs data-[size=default]:h-10"
+                      >
+                        <SelectValue placeholder="Origen" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos los orígenes</SelectItem>
+                        <SelectItem value="any">Con enlace de vendedor</SelectItem>
+                        <SelectItem value="none">Sin enlace (directas)</SelectItem>
+                        {referralFilterOptions.map((opt) => (
+                          <SelectItem key={opt.code} value={opt.code}>
+                            {opt.label} (?v={opt.code})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                <div className="min-w-0">
-                  <Select
-                    value={orderReferral}
-                    onValueChange={(v) => {
-                      setOrderReferral(v);
-                      setOrdersPage(1);
-                    }}
-                  >
-                    <SelectTrigger
-                      aria-label="Filtrar por origen de enlace"
-                      className="w-full min-w-0 rounded-xl border-input bg-background text-xs data-[size=default]:h-10"
+                  <div className="min-w-0">
+                    <Select
+                      value={orderPriceFilter}
+                      onValueChange={(v) => {
+                        setOrderPriceFilter(v as "all" | "unpriced" | "priced");
+                        setOrdersPage(1);
+                      }}
                     >
-                      <SelectValue placeholder="Origen" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos los orígenes</SelectItem>
-                      <SelectItem value="any">Con enlace de vendedor</SelectItem>
-                      <SelectItem value="none">Sin enlace (directas)</SelectItem>
-                      {referralFilterOptions.map((opt) => (
-                        <SelectItem key={opt.code} value={opt.code}>
-                          {opt.label} (?v={opt.code})
+                      <SelectTrigger
+                        aria-label="Filtrar por precios de la solicitud"
+                        className="w-full min-w-0 rounded-xl border-input bg-background text-xs data-[size=default]:h-10"
+                      >
+                        <SelectValue placeholder="Precios" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Con o sin precio</SelectItem>
+                        <SelectItem value="unpriced">
+                          Con artículos sin precio
                         </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="min-w-0">
-                  <Select
-                    value={orderPriceFilter}
-                    onValueChange={(v) => {
-                      setOrderPriceFilter(v as "all" | "unpriced" | "priced");
-                      setOrdersPage(1);
-                    }}
-                  >
-                    <SelectTrigger
-                      aria-label="Filtrar por precios de la solicitud"
-                      className="w-full min-w-0 rounded-xl border-input bg-background text-xs data-[size=default]:h-10"
-                    >
-                      <SelectValue placeholder="Precios" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Con o sin precio</SelectItem>
-                      <SelectItem value="unpriced">
-                        Con artículos sin precio
-                      </SelectItem>
-                      <SelectItem value="priced">Todos con precio</SelectItem>
-                    </SelectContent>
-                  </Select>
+                        <SelectItem value="priced">Todos con precio</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
             </div>

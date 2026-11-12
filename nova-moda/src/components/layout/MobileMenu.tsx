@@ -75,7 +75,7 @@ export function MobileMenu({ open, onClose }: MobileMenuProps) {
   return (
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true">
           <motion.button
             type="button"
             aria-label="Cerrar menú"
