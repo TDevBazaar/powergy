@@ -4,7 +4,7 @@ import { Heart, ShoppingBag, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
 import { LazyImage } from "@/components/shop/LazyImage";
 import { useCatalogStore } from "@/lib/catalog";
-import { formatPriceLabel } from "@/lib/format";
+import { formatPrice, formatPriceLabel } from "@/lib/format";
 import { href, navigate } from "@/lib/router";
 import { useNova } from "@/lib/store";
 import type { Product } from "@/lib/types";
@@ -33,6 +33,11 @@ export function ProductCard({ product, className }: ProductCardProps) {
     (s) => s.cart.find((item) => item.productId === product.id)?.qty ?? 0
   );
   const sinPrecio = !(product.price > 0);
+  const hasDiscount =
+    product.onSale &&
+    Boolean(product.discountPercent && product.discountPercent > 0) &&
+    product.price > 0 &&
+    product.originalPrice > product.price;
 
   const quickAdd = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -144,15 +149,26 @@ export function ProductCard({ product, className }: ProductCardProps) {
 
         <div className="mt-3 px-1">
           <p className="truncate text-sm font-medium">{product.name}</p>
-          <div className="mt-0.5 flex items-center gap-2">
+          <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <span
               className={cn(
-                "text-sm font-semibold",
-                sinPrecio && "text-camel-deep"
+                "text-sm font-semibold tabular-nums",
+                sinPrecio && "text-camel-deep",
+                hasDiscount && "text-[#B3402E]"
               )}
             >
               {formatPriceLabel(product.price)}
             </span>
+            {hasDiscount && (
+              <>
+                <span className="text-xs text-muted-foreground line-through tabular-nums">
+                  {formatPrice(product.originalPrice)}
+                </span>
+                <span className="rounded-full bg-[#B3402E]/12 px-1.5 py-0.5 text-[10.5px] font-bold leading-none text-[#B3402E] tabular-nums">
+                  -{product.discountPercent}%
+                </span>
+              </>
+            )}
           </div>
         </div>
       </a>

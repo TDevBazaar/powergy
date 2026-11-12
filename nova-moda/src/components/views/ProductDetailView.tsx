@@ -27,7 +27,7 @@ import {
 } from "@/lib/catalog";
 import { fetchProductsPage } from "@/lib/powergy-api";
 import { categoryMedia } from "@/lib/category-media";
-import { formatPriceLabel } from "@/lib/format";
+import { formatPrice, formatPriceLabel } from "@/lib/format";
 import { href, navigate } from "@/lib/router";
 import { useNova } from "@/lib/store";
 import type { Product } from "@/lib/types";
@@ -130,6 +130,11 @@ export function ProductDetailView({ productId }: { productId: string }) {
   }
 
   const sinPrecio = !(product.price > 0);
+  const hasDiscount =
+    product.onSale &&
+    Boolean(product.discountPercent && product.discountPercent > 0) &&
+    product.price > 0 &&
+    product.originalPrice > product.price;
   const media = categoryMedia(product.category);
 
   const handleAdd = () => {
@@ -218,7 +223,14 @@ export function ProductDetailView({ productId }: { productId: string }) {
               {media.tagline && ` · ${media.tagline}`}
             </span>
             {product.badge && (
-              <span className="rounded-full bg-foreground px-3 py-1 text-[11px] font-semibold text-background">
+              <span
+                className={cn(
+                  "rounded-full px-3 py-1 text-[11px] font-semibold",
+                  product.badge === "oferta"
+                    ? "bg-[#B3402E] text-[#FBF6EE]"
+                    : "bg-foreground text-background"
+                )}
+              >
                 {product.badge === "populares" ? "Populares" : "Oferta"}
               </span>
             )}
@@ -240,15 +252,26 @@ export function ProductDetailView({ productId }: { productId: string }) {
             )}
           </div>
 
-          <div className="mt-4 flex items-baseline gap-3">
+          <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
             <span
               className={cn(
-                "text-3xl font-bold tracking-tight",
-                sinPrecio && "text-camel-deep"
+                "text-3xl font-bold tracking-tight tabular-nums",
+                sinPrecio && "text-camel-deep",
+                hasDiscount && "text-[#B3402E]"
               )}
             >
               {formatPriceLabel(product.price)}
             </span>
+            {hasDiscount && (
+              <>
+                <span className="text-lg text-muted-foreground line-through tabular-nums">
+                  {formatPrice(product.originalPrice)}
+                </span>
+                <span className="rounded-full bg-[#B3402E]/12 px-2.5 py-1 text-xs font-bold text-[#B3402E] tabular-nums">
+                  -{product.discountPercent}%
+                </span>
+              </>
+            )}
           </div>
           {sinPrecio && (
             <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">

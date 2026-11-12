@@ -354,8 +354,30 @@ export function CheckoutView() {
                     {l.product.categoryName}
                   </span>
                 </span>
-                <span className="shrink-0 text-right text-[13.5px] font-semibold sm:text-sm">
-                  {formatPriceLabel(l.lineTotal)}
+                <span className="shrink-0 text-right">
+                  {l.product.onSale &&
+                  l.product.discountPercent &&
+                  l.product.discountPercent > 0 &&
+                  l.product.price > 0 &&
+                  l.product.originalPrice > l.product.price ? (
+                    <>
+                      <span className="block text-[13.5px] font-semibold text-[#B3402E] tabular-nums sm:text-sm">
+                        {formatPriceLabel(l.lineTotal)}
+                      </span>
+                      <span className="mt-0.5 flex items-center justify-end gap-1 text-[10.5px]">
+                        <span className="text-muted-foreground line-through tabular-nums">
+                          {formatPrice(l.product.originalPrice * l.qty)}
+                        </span>
+                        <span className="rounded-full bg-[#B3402E]/12 px-1.5 py-0.5 font-bold text-[#B3402E] tabular-nums">
+                          -{l.product.discountPercent}%
+                        </span>
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-[13.5px] font-semibold tabular-nums sm:text-sm">
+                      {formatPriceLabel(l.lineTotal)}
+                    </span>
+                  )}
                 </span>
               </li>
             ))}

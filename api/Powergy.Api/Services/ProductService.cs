@@ -81,7 +81,13 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
 
         var totalActive = await activeQuery.CountAsync(cancellationToken);
         var maxPriceUsd = await activeQuery.MaxAsync(
-            product => (decimal?)product.PriceUsd,
+            product => product.PriceUsd == null || product.PriceUsd <= 0m
+                ? (decimal?)null
+                : (decimal?)(product.OnSale && product.DiscountPercent != null && product.DiscountPercent > 0
+                    ? (Math.Round(product.PriceUsd.Value * (100m - product.DiscountPercent.Value) / 100m, 2) < 0.01m
+                        ? 0.01m
+                        : Math.Round(product.PriceUsd.Value * (100m - product.DiscountPercent.Value) / 100m, 2))
+                    : product.PriceUsd.Value),
             cancellationToken);
 
         return new ProductCatalogMetaResponse(totalActive, maxPriceUsd);
@@ -182,6 +188,11 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
             throw new ApiConflictException("El ID o slug ya está en uso.");
         }
 
+        var discountPercent = ProductPricing.NormalizeDiscountPercent(
+            request.OnSale,
+            request.PriceUsd,
+            request.DiscountPercent);
+
         var product = new Product
         {
             Id = id,
@@ -196,6 +207,7 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
             Specifications = RequiredText(request.Specifications, nameof(request.Specifications)),
             PrimaryImage = RequiredText(request.PrimaryImage, nameof(request.PrimaryImage)),
             OnSale = request.OnSale,
+            DiscountPercent = discountPercent,
             Warranty = request.Warranty,
             Transport = request.Transport,
             Invoice = request.Invoice,
@@ -220,6 +232,7 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
                 .Add("priceUsd", null, product.PriceUsd)
                 .Add("primaryImage", null, product.PrimaryImage)
                 .Add("onSale", null, product.OnSale)
+                .Add("discountPercent", null, product.DiscountPercent)
                 .Add("warranty", null, product.Warranty)
                 .Add("transport", null, product.Transport)
                 .Add("invoice", null, product.Invoice)
@@ -261,6 +274,11 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
             throw new ApiConflictException("El slug ya está en uso.");
         }
 
+        var discountPercent = ProductPricing.NormalizeDiscountPercent(
+            request.OnSale,
+            request.PriceUsd,
+            request.DiscountPercent);
+
         var anterior = new
         {
             product.Slug,
@@ -273,6 +291,7 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
             product.Specifications,
             product.PrimaryImage,
             product.OnSale,
+            product.DiscountPercent,
             product.Warranty,
             product.Transport,
             product.Invoice,
@@ -291,6 +310,7 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
         product.Specifications = RequiredText(request.Specifications, nameof(request.Specifications));
         product.PrimaryImage = RequiredText(request.PrimaryImage, nameof(request.PrimaryImage));
         product.OnSale = request.OnSale;
+        product.DiscountPercent = discountPercent;
         product.Warranty = request.Warranty;
         product.Transport = request.Transport;
         product.Invoice = request.Invoice;
@@ -315,6 +335,7 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
                     Recortar(product.Specifications))
                 .Add("primaryImage", anterior.PrimaryImage, product.PrimaryImage)
                 .Add("onSale", anterior.OnSale, product.OnSale)
+                .Add("discountPercent", anterior.DiscountPercent, product.DiscountPercent)
                 .Add("warranty", anterior.Warranty, product.Warranty)
                 .Add("transport", anterior.Transport, product.Transport)
                 .Add("invoice", anterior.Invoice, product.Invoice)
@@ -424,12 +445,26 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
         {
             ProductSortModes.PrecioAsc => query
                 .OrderBy(product => product.PriceUsd == null || product.PriceUsd <= 0)
-                .ThenBy(product => product.PriceUsd ?? 0m)
+                .ThenBy(product =>
+                    product.PriceUsd == null || product.PriceUsd <= 0
+                        ? 0m
+                        : (product.OnSale && product.DiscountPercent != null && product.DiscountPercent > 0
+                            ? (Math.Round(product.PriceUsd.Value * (100m - product.DiscountPercent.Value) / 100m, 2) < 0.01m
+                                ? 0.01m
+                                : Math.Round(product.PriceUsd.Value * (100m - product.DiscountPercent.Value) / 100m, 2))
+                            : product.PriceUsd.Value))
                 .ThenBy(product => product.Name)
                 .ThenBy(product => product.Id),
             ProductSortModes.PrecioDesc => query
                 .OrderBy(product => product.PriceUsd == null || product.PriceUsd <= 0)
-                .ThenByDescending(product => product.PriceUsd ?? 0m)
+                .ThenByDescending(product =>
+                    product.PriceUsd == null || product.PriceUsd <= 0
+                        ? 0m
+                        : (product.OnSale && product.DiscountPercent != null && product.DiscountPercent > 0
+                            ? (Math.Round(product.PriceUsd.Value * (100m - product.DiscountPercent.Value) / 100m, 2) < 0.01m
+                                ? 0.01m
+                                : Math.Round(product.PriceUsd.Value * (100m - product.DiscountPercent.Value) / 100m, 2))
+                            : product.PriceUsd.Value))
                 .ThenBy(product => product.Name)
                 .ThenBy(product => product.Id),
             ProductSortModes.Nuevos => query
@@ -455,8 +490,16 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
                         product.PriceUsd == null
                         || product.PriceUsd <= 0
                         || (product.PriceUsd > 0
-                            && ((product.PriceUsd ?? 0m) > cursor.EffectivePrice
-                                || ((product.PriceUsd ?? 0m) == cursor.EffectivePrice
+                            && ((product.OnSale && product.DiscountPercent != null && product.DiscountPercent > 0
+                                    ? (Math.Round(product.PriceUsd.Value * (100m - product.DiscountPercent.Value) / 100m, 2) < 0.01m
+                                        ? 0.01m
+                                        : Math.Round(product.PriceUsd.Value * (100m - product.DiscountPercent.Value) / 100m, 2))
+                                    : product.PriceUsd.Value) > cursor.EffectivePrice
+                                || ((product.OnSale && product.DiscountPercent != null && product.DiscountPercent > 0
+                                        ? (Math.Round(product.PriceUsd.Value * (100m - product.DiscountPercent.Value) / 100m, 2) < 0.01m
+                                            ? 0.01m
+                                            : Math.Round(product.PriceUsd.Value * (100m - product.DiscountPercent.Value) / 100m, 2))
+                                        : product.PriceUsd.Value) == cursor.EffectivePrice
                                     && (string.Compare(product.Name, cursor.Name) > 0
                                         || (product.Name == cursor.Name
                                             && string.Compare(product.Id, cursor.Id) > 0))))));
@@ -475,8 +518,16 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
                         product.PriceUsd == null
                         || product.PriceUsd <= 0
                         || (product.PriceUsd > 0
-                            && ((product.PriceUsd ?? 0m) < cursor.EffectivePrice
-                                || ((product.PriceUsd ?? 0m) == cursor.EffectivePrice
+                            && ((product.OnSale && product.DiscountPercent != null && product.DiscountPercent > 0
+                                    ? (Math.Round(product.PriceUsd.Value * (100m - product.DiscountPercent.Value) / 100m, 2) < 0.01m
+                                        ? 0.01m
+                                        : Math.Round(product.PriceUsd.Value * (100m - product.DiscountPercent.Value) / 100m, 2))
+                                    : product.PriceUsd.Value) < cursor.EffectivePrice
+                                || ((product.OnSale && product.DiscountPercent != null && product.DiscountPercent > 0
+                                        ? (Math.Round(product.PriceUsd.Value * (100m - product.DiscountPercent.Value) / 100m, 2) < 0.01m
+                                            ? 0.01m
+                                            : Math.Round(product.PriceUsd.Value * (100m - product.DiscountPercent.Value) / 100m, 2))
+                                        : product.PriceUsd.Value) == cursor.EffectivePrice
                                     && (string.Compare(product.Name, cursor.Name) > 0
                                         || (product.Name == cursor.Name
                                             && string.Compare(product.Id, cursor.Id) > 0))))));
@@ -518,12 +569,15 @@ public sealed class ProductService(PowergyDbContext db, IAuditLogService audit) 
     private static string EncodeCursor(string sort, Product product)
     {
         var isUnpriced = product.PriceUsd is null or <= 0;
+        var effectivePrice = isUnpriced
+            ? 0m
+            : ProductPricing.GetEffectivePriceUsd(product) ?? 0m;
         var token = new ProductCursorToken(
             sort,
             product.Id,
             product.TopRank,
             product.Name,
-            isUnpriced ? 0m : product.PriceUsd!.Value,
+            effectivePrice,
             isUnpriced,
             DateTime.SpecifyKind(product.CreatedAt, DateTimeKind.Utc));
 

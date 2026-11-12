@@ -118,6 +118,7 @@ export interface ProductPayload {
   specifications: string;
   primaryImage: string;
   onSale: boolean;
+  discountPercent: number | null;
   warranty: boolean;
   transport: boolean;
   invoice: boolean;

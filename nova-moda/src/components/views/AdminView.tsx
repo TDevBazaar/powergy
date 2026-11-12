@@ -131,6 +131,7 @@ interface ProductForm {
   image: string;
   specifications: string;
   onSale: boolean;
+  discountPercent: string;
   topVentas: boolean;
   active: boolean;
 }
@@ -146,9 +147,16 @@ const emptyProduct: ProductForm = {
   image: "",
   specifications: "",
   onSale: false,
+  discountPercent: "",
   topVentas: false,
   active: true,
 };
+
+function calculateDiscountedPrice(originalPrice: number, discountPercent: number): number {
+  const pct = Math.min(99, Math.max(1, Math.round(discountPercent)));
+  const cents = Math.round((Math.round(originalPrice * 100) * (100 - pct)) / 100 + 1e-9);
+  return Math.max(1, cents) / 100;
+}
 
 interface CategoryForm {
   id: string | null;
@@ -1066,6 +1074,13 @@ export function AdminView() {
   };
 
   const abrirEdicionProducto = (producto: ApiProduct) => {
+    const basePrice = producto.original_price_usd ?? producto.price_usd;
+    const activeDiscount =
+      producto.oferta &&
+      typeof producto.discount_percent === "number" &&
+      producto.discount_percent > 0
+        ? String(Math.round(producto.discount_percent))
+        : "";
     setFormProducto({
       id: producto.id,
       name: producto.name,
@@ -1073,10 +1088,11 @@ export function AdminView() {
       subcategory: producto.subcategory,
       brand: producto.brand,
       model: producto.model,
-      price: producto.price_usd === null ? "" : String(producto.price_usd),
+      price: basePrice === null ? "" : String(basePrice),
       image: producto.primary_image,
       specifications: producto.specifications,
       onSale: producto.oferta,
+      discountPercent: activeDiscount,
       topVentas: producto.top_ventas || producto.top_rank !== null,
       active: producto.isActive,
     });
@@ -1111,6 +1127,27 @@ export function AdminView() {
       return;
     }
 
+    let discountPercent: number | null = null;
+    if (formProducto.onSale) {
+      const descuentoTexto = formProducto.discountPercent.trim();
+      if (descuentoTexto !== "") {
+        if (!/^\d+$/.test(descuentoTexto)) {
+          toast.error("El % de rebaja debe ser un número entero entre 1 y 99.");
+          return;
+        }
+        const pct = Number.parseInt(descuentoTexto, 10);
+        if (pct < 1 || pct > 99) {
+          toast.error("El % de rebaja debe estar entre 1 y 99.");
+          return;
+        }
+        if (precio === null || precio <= 0) {
+          toast.error("Define un precio mayor que 0 para aplicar un % de rebaja.");
+          return;
+        }
+        discountPercent = pct;
+      }
+    }
+
     setSaving(true);
     try {
       const payload = {
@@ -1124,6 +1161,7 @@ export function AdminView() {
         specifications: formProducto.specifications.trim() || name,
         primaryImage: formProducto.image.trim(),
         onSale: formProducto.onSale,
+        discountPercent,
         warranty: false,
         transport: false,
         invoice: false,
@@ -1165,10 +1203,11 @@ export function AdminView() {
           brand: producto.brand,
           model: producto.model,
           name: producto.name,
-          priceUsd: producto.price_usd,
+          priceUsd: producto.original_price_usd ?? producto.price_usd,
           specifications: producto.specifications,
           primaryImage: producto.primary_image,
           onSale: producto.oferta,
+          discountPercent: producto.discount_percent ?? null,
           warranty: producto.garantia,
           transport: producto.transporte,
           invoice: producto.factura,
@@ -1988,8 +2027,17 @@ export function AdminView() {
                             {(p.oferta || p.top_ventas || p.top_rank !== null) && (
                               <div className="mt-1 flex flex-wrap gap-1">
                                 {p.oferta && (
-                                  <span className="rounded-full bg-camel/15 px-2 py-0.5 text-[10px] font-medium text-camel-deep">
-                                    Oferta
+                                  <span
+                                    className={cn(
+                                      "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                                      p.discount_percent && p.discount_percent > 0
+                                        ? "bg-[#B3402E]/12 font-semibold text-[#B3402E]"
+                                        : "bg-camel/15 text-camel-deep"
+                                    )}
+                                  >
+                                    {p.discount_percent && p.discount_percent > 0
+                                      ? `Oferta -${p.discount_percent}%`
+                                      : "Oferta"}
                                   </span>
                                 )}
                                 {(p.top_ventas || p.top_rank !== null) && (
@@ -2003,8 +2051,26 @@ export function AdminView() {
                         </div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">{p.category}</td>
-                      <td className="px-4 py-3 font-semibold whitespace-nowrap">
-                        {formatPriceLabel(p.price_usd ?? 0)}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {p.oferta &&
+                        p.discount_percent &&
+                        p.discount_percent > 0 &&
+                        p.price_usd &&
+                        p.original_price_usd &&
+                        p.original_price_usd > p.price_usd ? (
+                          <div>
+                            <span className="font-semibold text-[#B3402E] tabular-nums">
+                              {formatPriceLabel(p.price_usd)}
+                            </span>
+                            <span className="block text-[11px] text-muted-foreground line-through tabular-nums">
+                              {formatPrice(p.original_price_usd)}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="font-semibold tabular-nums">
+                            {formatPriceLabel(p.price_usd ?? 0)}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <Switch
@@ -2106,17 +2172,48 @@ export function AdminView() {
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 truncate text-xs text-muted-foreground">
-                    {p.category} ·{" "}
-                    <span className="font-semibold text-foreground">
+                  <p className="mt-1 flex flex-wrap items-baseline gap-x-1.5 text-xs text-muted-foreground">
+                    <span>{p.category} ·</span>
+                    <span
+                      className={cn(
+                        "font-semibold tabular-nums",
+                        p.oferta &&
+                          p.discount_percent &&
+                          p.discount_percent > 0 &&
+                          p.price_usd &&
+                          p.original_price_usd &&
+                          p.original_price_usd > p.price_usd
+                          ? "text-[#B3402E]"
+                          : "text-foreground"
+                      )}
+                    >
                       {formatPriceLabel(p.price_usd ?? 0)}
                     </span>
+                    {p.oferta &&
+                      p.discount_percent &&
+                      p.discount_percent > 0 &&
+                      p.price_usd &&
+                      p.original_price_usd &&
+                      p.original_price_usd > p.price_usd && (
+                        <span className="text-[11px] line-through tabular-nums">
+                          {formatPrice(p.original_price_usd)}
+                        </span>
+                      )}
                   </p>
                   {(p.oferta || p.top_ventas || p.top_rank !== null) && (
                     <div className="mt-1.5 flex flex-wrap gap-1">
                       {p.oferta && (
-                        <span className="rounded-full bg-camel/15 px-2 py-0.5 text-[10px] font-medium text-camel-deep">
-                          Oferta
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                            p.discount_percent && p.discount_percent > 0
+                              ? "bg-[#B3402E]/12 font-semibold text-[#B3402E]"
+                              : "bg-camel/15 text-camel-deep"
+                          )}
+                        >
+                          {p.discount_percent && p.discount_percent > 0
+                            ? `Oferta -${p.discount_percent}%`
+                            : "Oferta"}
                         </span>
                       )}
                       {(p.top_ventas || p.top_rank !== null) && (
@@ -3257,7 +3354,7 @@ export function AdminView() {
 
       {/* ── Diálogo de producto ── */}
       <Dialog open={modalProducto} onOpenChange={setModalProducto}>
-        <DialogContent className="rounded-[1.6rem] bg-card p-4 sm:max-w-lg sm:p-6">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-[1.6rem] bg-card p-4 sm:max-w-lg sm:p-6">
           <DialogHeader>
             <DialogTitle>
               {formProducto.id ? "Editar producto" : "Nuevo producto"}
@@ -3416,34 +3513,123 @@ export function AdminView() {
                 </div>
               </div>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 rounded-2xl bg-secondary/60 p-3.5 sm:grid sm:grid-cols-3 sm:gap-3 sm:p-4">
-              <label className="flex shrink-0 items-center gap-2 text-[12.5px] font-medium sm:text-[13px]">
-                <Switch
-                  checked={formProducto.onSale}
-                  onCheckedChange={(v) =>
-                    setFormProducto({ ...formProducto, onSale: v })
-                  }
-                />
-                Oferta
-              </label>
-              <label className="flex shrink-0 items-center gap-2 text-[12.5px] font-medium sm:text-[13px]">
-                <Switch
-                  checked={formProducto.topVentas}
-                  onCheckedChange={(v) =>
-                    setFormProducto({ ...formProducto, topVentas: v })
-                  }
-                />
-                Populares
-              </label>
-              <label className="flex shrink-0 items-center gap-2 text-[12.5px] font-medium sm:text-[13px]">
-                <Switch
-                  checked={formProducto.active}
-                  onCheckedChange={(v) =>
-                    setFormProducto({ ...formProducto, active: v })
-                  }
-                />
-                Visible
-              </label>
+            <div className="rounded-2xl bg-secondary/60 p-3.5 sm:p-4">
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 sm:grid sm:grid-cols-3 sm:gap-3">
+                <label className="flex shrink-0 items-center gap-2 text-[12.5px] font-medium sm:text-[13px]">
+                  <Switch
+                    checked={formProducto.onSale}
+                    onCheckedChange={(v) =>
+                      setFormProducto({ ...formProducto, onSale: v })
+                    }
+                  />
+                  Oferta
+                </label>
+                <label className="flex shrink-0 items-center gap-2 text-[12.5px] font-medium sm:text-[13px]">
+                  <Switch
+                    checked={formProducto.topVentas}
+                    onCheckedChange={(v) =>
+                      setFormProducto({ ...formProducto, topVentas: v })
+                    }
+                  />
+                  Populares
+                </label>
+                <label className="flex shrink-0 items-center gap-2 text-[12.5px] font-medium sm:text-[13px]">
+                  <Switch
+                    checked={formProducto.active}
+                    onCheckedChange={(v) =>
+                      setFormProducto({ ...formProducto, active: v })
+                    }
+                  />
+                  Visible
+                </label>
+              </div>
+
+              {formProducto.onSale && (() => {
+                const origRaw = Number.parseFloat(
+                  formProducto.price.trim().replace(",", ".")
+                );
+                const origValid = Number.isFinite(origRaw) && origRaw > 0;
+                const pctText = formProducto.discountPercent.trim();
+                const pctInt = /^\d+$/.test(pctText)
+                  ? Number.parseInt(pctText, 10)
+                  : NaN;
+                const pctValid = Number.isInteger(pctInt) && pctInt >= 1 && pctInt <= 99;
+                const finalPrice =
+                  origValid && pctValid
+                    ? calculateDiscountedPrice(origRaw, pctInt)
+                    : null;
+                const savings =
+                  finalPrice !== null
+                    ? Math.max(0, Math.round((origRaw - finalPrice) * 100) / 100)
+                    : 0;
+
+                return (
+                  <div className="mt-3.5 border-t border-border/70 pt-3.5">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-[150px_1fr] sm:items-end">
+                      <div className="min-w-0">
+                        <Label htmlFor="p-discount" className="text-xs font-medium">
+                          % de rebaja
+                        </Label>
+                        <div className="relative mt-1.5">
+                          <Input
+                            id="p-discount"
+                            value={formProducto.discountPercent}
+                            onChange={(e) => {
+                              const clean = e.target.value.replace(/[^\d]/g, "").slice(0, 2);
+                              setFormProducto({
+                                ...formProducto,
+                                discountPercent: clean,
+                              });
+                            }}
+                            placeholder="Ej. 20"
+                            inputMode="numeric"
+                            maxLength={2}
+                            className="h-10 rounded-xl border-input bg-background pr-8 tabular-nums"
+                          />
+                          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">
+                            %
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-border/60 bg-background/85 px-3.5 py-2.5 text-xs">
+                        {!origValid ? (
+                          <p className="text-muted-foreground">
+                            Define un <strong>Precio (USD)</strong> mayor que 0 para calcular la rebaja.
+                          </p>
+                        ) : pctText === "" ? (
+                          <p className="text-muted-foreground">
+                            Escribe un porcentaje (1–99%) para calcular el precio final automáticamente.
+                          </p>
+                        ) : !pctValid ? (
+                          <p className="text-[#B3402E]">
+                            Ingresa un porcentaje entre 1 y 99.
+                          </p>
+                        ) : finalPrice !== null ? (
+                          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                            <div>
+                              <span className="text-[11px] text-muted-foreground">
+                                Precio en tienda
+                              </span>
+                              <div className="flex flex-wrap items-baseline gap-2">
+                                <span className="text-base font-bold text-[#B3402E] tabular-nums">
+                                  {formatPrice(finalPrice)}
+                                </span>
+                                <span className="text-[12px] text-muted-foreground line-through tabular-nums">
+                                  {formatPrice(origRaw)}
+                                </span>
+                              </div>
+                            </div>
+                            <span className="rounded-full bg-[#B3402E]/12 px-2 py-0.5 text-[11px] font-bold text-[#B3402E] tabular-nums">
+                              Ahorro {formatPrice(savings)} (-{pctInt}%)
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
           <DialogFooter className="mt-2 gap-2">

@@ -17,6 +17,7 @@ public sealed class Product
     public required string Specifications { get; set; }
     public required string PrimaryImage { get; set; }
     public bool OnSale { get; set; }
+    public int? DiscountPercent { get; set; }
     public bool Warranty { get; set; }
     public bool Transport { get; set; }
     public bool Invoice { get; set; }

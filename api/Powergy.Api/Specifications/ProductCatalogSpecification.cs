@@ -72,7 +72,13 @@ public sealed class ProductCatalogSpecification : Specification<Product>
             && (!hasMaxPrice
                 || (product.PriceUsd.HasValue
                     && product.PriceUsd.Value > 0
-                    && product.PriceUsd.Value <= maxPriceValue));
+                    && (product.OnSale
+                        && product.DiscountPercent != null
+                        && product.DiscountPercent > 0
+                        ? (Math.Round(product.PriceUsd.Value * (100m - product.DiscountPercent.Value) / 100m, 2) < 0.01m
+                            ? 0.01m
+                            : Math.Round(product.PriceUsd.Value * (100m - product.DiscountPercent.Value) / 100m, 2))
+                        : product.PriceUsd.Value) <= maxPriceValue));
     }
 
     private static string[] ParseCategories(string? category, string? categories)

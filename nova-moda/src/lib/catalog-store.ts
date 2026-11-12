@@ -78,6 +78,9 @@ function mergeProducts(
       !prev ||
       prev.createdAt !== item.createdAt ||
       prev.price !== item.price ||
+      prev.originalPrice !== item.originalPrice ||
+      prev.discountPercent !== item.discountPercent ||
+      prev.onSale !== item.onSale ||
       prev.image !== item.image ||
       prev.name !== item.name ||
       prev.category !== item.category

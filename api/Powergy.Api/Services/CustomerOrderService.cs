@@ -106,7 +106,7 @@ public sealed class CustomerOrderService(
                     CategoryName = product.Category.Name,
                     Quantity = item.Quantity,
                     OriginalQuantity = item.Quantity,
-                    UnitPriceUsd = product.PriceUsd
+                    UnitPriceUsd = ProductPricing.GetEffectivePriceUsd(product)
                 };
             }).ToList()
         };

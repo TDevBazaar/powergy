@@ -91,6 +91,7 @@ public sealed class PowergyDbContext(DbContextOptions<PowergyDbContext> options)
             entity.Property(product => product.PrimaryImage)
                 .HasColumnName("primary_image").HasMaxLength(1000).IsRequired();
             entity.Property(product => product.OnSale).HasColumnName("on_sale");
+            entity.Property(product => product.DiscountPercent).HasColumnName("discount_percent");
             entity.Property(product => product.Warranty).HasColumnName("warranty");
             entity.Property(product => product.Transport).HasColumnName("transport");
             entity.Property(product => product.Invoice).HasColumnName("invoice");

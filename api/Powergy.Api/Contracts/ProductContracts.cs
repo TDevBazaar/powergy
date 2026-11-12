@@ -175,6 +175,10 @@ public sealed record CreateProductRequest
     /// <summary>Whether the product is on sale.</summary>
     public bool OnSale { get; init; }
 
+    /// <summary>Optional discount percentage (0-99) when the product is on sale.</summary>
+    [Range(0, 99, ErrorMessage = "El porcentaje de rebaja debe estar entre 0 y 99.")]
+    public int? DiscountPercent { get; init; }
+
     /// <summary>Whether warranty is offered.</summary>
     public bool Warranty { get; init; }
 
@@ -238,6 +242,10 @@ public sealed record UpdateProductRequest
     /// <summary>Whether the product is on sale.</summary>
     public bool OnSale { get; init; }
 
+    /// <summary>Optional discount percentage (0-99) when the product is on sale.</summary>
+    [Range(0, 99, ErrorMessage = "El porcentaje de rebaja debe estar entre 0 y 99.")]
+    public int? DiscountPercent { get; init; }
+
     /// <summary>Whether warranty is offered.</summary>
     public bool Warranty { get; init; }
 
@@ -266,6 +274,8 @@ public sealed record ProductResponse(
     string Model,
     string Name,
     [property: JsonPropertyName("price_usd")] decimal? PriceUsd,
+    [property: JsonPropertyName("original_price_usd")] decimal? OriginalPriceUsd,
+    [property: JsonPropertyName("discount_percent")] int? DiscountPercent,
     string Specifications,
     [property: JsonPropertyName("primary_image")] string PrimaryImage,
     [property: JsonPropertyName("oferta")] bool OnSale,
@@ -289,7 +299,9 @@ public sealed record ProductResponse(
         product.Brand,
         product.Model,
         product.Name,
+        ProductPricing.GetEffectivePriceUsd(product),
         product.PriceUsd,
+        ProductPricing.GetActiveDiscountPercent(product),
         product.Specifications,
         product.PrimaryImage,
         product.OnSale,

@@ -433,6 +433,10 @@ namespace Powergy.Api.Migrations
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
+                    b.Property<int?>("DiscountPercent")
+                        .HasColumnType("integer")
+                        .HasColumnName("discount_percent");
+
                     b.Property<bool>("Invoice")
                         .HasColumnType("boolean")
                         .HasColumnName("invoice");

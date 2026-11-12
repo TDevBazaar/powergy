@@ -23,8 +23,12 @@ export interface ApiProduct {
   brand: string;
   model: string;
   name: string;
-  /** Precio en USD; null o 0 significa "consultar" */
+  /** Precio actual en USD (con rebaja aplicada si tiene); null o 0 significa "consultar" */
   price_usd: number | null;
+  /** Precio original en USD antes de descuento; null o 0 significa "consultar" */
+  original_price_usd?: number | null;
+  /** Porcentaje de rebaja aplicado (1-99) cuando está en oferta */
+  discount_percent?: number | null;
   specifications: string;
   primary_image: string;
   oferta: boolean;
@@ -133,12 +137,25 @@ export function mapProduct(
   const categorySlug = category?.slug ?? slugify(product.category);
   const categoryName = category?.name ?? product.category;
   const image = product.primary_image?.trim() ?? "";
+  const effectivePrice = product.price_usd ?? 0;
+  const rawOriginal = product.original_price_usd ?? product.price_usd ?? 0;
+  const discountPercent =
+    product.oferta &&
+    effectivePrice > 0 &&
+    rawOriginal > effectivePrice &&
+    typeof product.discount_percent === "number" &&
+    product.discount_percent > 0
+      ? Math.round(product.discount_percent)
+      : null;
+  const originalPrice = discountPercent ? rawOriginal : effectivePrice;
 
   return {
     id: product.id,
     slug: product.slug,
     name: product.name,
-    price: product.price_usd ?? 0,
+    price: effectivePrice,
+    originalPrice,
+    discountPercent,
     category: categorySlug,
     categoryName,
     categoryId: product.categoryId,
@@ -179,8 +196,12 @@ export interface ProductView {
   id: string;
   slug: string;
   name: string;
-  /** 0 = precio por confirmar ("Consultar") */
+  /** 0 = precio por confirmar ("Consultar"); con rebaja ya aplicada cuando hay descuento */
   price: number;
+  /** Precio original antes de aplicar el % de rebaja */
+  originalPrice: number;
+  /** Porcentaje entero (1-99) si el producto tiene oferta con rebaja */
+  discountPercent: number | null;
   /** slug de la categoría */
   category: string;
   categoryName: string;

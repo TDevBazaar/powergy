@@ -9,7 +9,7 @@ import { CategoryGridSkeleton, ProductGridSkeleton } from "@/components/shop/Ske
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useCategories, useCategoriesStatus, useHomeCatalog } from "@/lib/catalog";
-import { formatPriceLabel } from "@/lib/format";
+import { formatPrice, formatPriceLabel } from "@/lib/format";
 import { href, navigate } from "@/lib/router";
 
 export function HomeView() {
@@ -85,8 +85,24 @@ export function HomeView() {
                   <span className="block text-[13px] font-semibold">
                     {promo.name}
                   </span>
-                  <span className="mt-0.5 block text-[13px] font-bold text-camel-deep">
-                    {formatPriceLabel(promo.price)}
+                  <span className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+                    <span className="text-[13px] font-bold text-camel-deep tabular-nums">
+                      {formatPriceLabel(promo.price)}
+                    </span>
+                    {promo.onSale &&
+                      promo.discountPercent &&
+                      promo.discountPercent > 0 &&
+                      promo.price > 0 &&
+                      promo.originalPrice > promo.price && (
+                        <>
+                          <span className="text-[11px] text-muted-foreground line-through tabular-nums">
+                            {formatPrice(promo.originalPrice)}
+                          </span>
+                          <span className="rounded-full bg-[#B3402E]/12 px-1.5 py-0.5 text-[10px] font-bold text-[#B3402E] tabular-nums">
+                            -{promo.discountPercent}%
+                          </span>
+                        </>
+                      )}
                   </span>
                 </span>
               </button>

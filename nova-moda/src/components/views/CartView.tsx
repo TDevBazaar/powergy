@@ -145,9 +145,35 @@ export function CartView() {
                     className="shrink-0"
                   />
                   <div className="ml-auto min-w-0 text-right">
-                    <p className="text-[14px] font-bold sm:text-[15px]">
-                      {formatPriceLabel(line.lineTotal)}
-                    </p>
+                    <div className="flex flex-wrap items-baseline justify-end gap-x-1.5 gap-y-0.5">
+                      {line.product.onSale &&
+                        line.product.discountPercent &&
+                        line.product.discountPercent > 0 &&
+                        line.product.price > 0 &&
+                        line.product.originalPrice > line.product.price && (
+                          <>
+                            <span className="rounded-full bg-[#B3402E]/12 px-1.5 py-0.5 text-[10px] font-bold text-[#B3402E] tabular-nums">
+                              -{line.product.discountPercent}%
+                            </span>
+                            <span className="text-[11px] text-muted-foreground line-through tabular-nums">
+                              {formatPrice(line.product.originalPrice * line.qty)}
+                            </span>
+                          </>
+                        )}
+                      <p
+                        className={
+                          line.product.onSale &&
+                          line.product.discountPercent &&
+                          line.product.discountPercent > 0 &&
+                          line.product.price > 0 &&
+                          line.product.originalPrice > line.product.price
+                            ? "text-[14px] font-bold text-[#B3402E] tabular-nums sm:text-[15px]"
+                            : "text-[14px] font-bold tabular-nums sm:text-[15px]"
+                        }
+                      >
+                        {formatPriceLabel(line.lineTotal)}
+                      </p>
+                    </div>
                     {line.qty > 1 && line.product.price > 0 && (
                       <p className="text-[10.5px] text-muted-foreground sm:text-[11px]">
                         {formatPrice(line.product.price)} / ud.
